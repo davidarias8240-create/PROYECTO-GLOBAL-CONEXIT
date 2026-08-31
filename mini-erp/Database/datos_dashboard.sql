@@ -1,0 +1,49 @@
+ CREATE DATABASE NetWare CHARACTER SET utf8mb4 COLLATE
+utf8mb4_general_ci;
+ USE NetWare;
+
+ CREATE TABLE usuarios (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ nombre VARCHAR(100) NOT NULL,
+ email VARCHAR(150) NOT NULL UNIQUE,
+ password VARCHAR(255) NOT NULL,
+ rol VARCHAR(50) DEFAULT 'admin',
+ creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ );
+
+ CREATE TABLE clientes (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ nombre VARCHAR(150) NOT NULL,
+ documento VARCHAR(50),
+ email VARCHAR(150),
+ telefono VARCHAR(50),
+ direccion VARCHAR(255),
+ creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ );
+ 
+ CREATE TABLE productos (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ nombre VARCHAR(150) NOT NULL,
+ descripcion TEXT,
+ precio DECIMAL(10,2) NOT NULL,
+ stock INT DEFAULT 0,
+ creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+ );
+
+ CREATE TABLE ventas (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ cliente_id INT NOT NULL,
+ fecha DATE NOT NULL,
+ total DECIMAL(10,2) NOT NULL,
+ FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+ );
+
+ CREATE TABLE venta_detalle (
+ id INT AUTO_INCREMENT PRIMARY KEY,
+ venta_id INT NOT NULL,
+ producto_id INT NOT NULL,
+ cantidad INT NOT NULL,
+ precio DECIMAL(10,2) NOT NULL,
+ FOREIGN KEY (venta_id) REFERENCES ventas(id),
+ FOREIGN KEY (producto_id) REFERENCES productos(id)
+ );
