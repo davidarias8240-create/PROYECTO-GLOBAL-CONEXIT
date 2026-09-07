@@ -1,2 +1,2 @@
 ﻿# PROYECTO-GLOBAL-CONEXIT
-# David Gay
+
