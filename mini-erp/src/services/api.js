@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost/globalconexit/backend";
+const BASE_URL = "http://localhost/PROYECTO-GLOBAL-CONEXIT/backend";
 
 export async function obtenerClientes() {
   try {
@@ -58,6 +58,10 @@ export async function obtenerVentas() {
   }
 }
 
+export async function obtenerFacturas() {
+  return obtenerVentas();
+}
+
 export async function crearProducto(producto) {
   const response = await fetch(`${BASE_URL}/productos/crear.php`, {
     method: "POST",
@@ -74,6 +78,10 @@ export async function crearVenta(venta) {
     body: JSON.stringify(venta),
   });
   return response.json();
+}
+
+export async function crearFactura(factura) {
+  return crearVenta(factura);
 }
 
 export async function editarCliente(cliente) {
@@ -104,6 +112,10 @@ export async function editarVenta(venta) {
   return response.json();
 }
 
+export async function editarFactura(factura) {
+  return editarVenta(factura);
+}
+
 export async function eliminarCliente(id) {
   const response = await fetch(`${BASE_URL}/clientes/eliminar.php`, {
     method: "POST",
@@ -129,4 +141,8 @@ export async function eliminarVenta(id) {
     body: JSON.stringify({ id }),
   });
   return response.json();
+}
+
+export async function eliminarFactura(id) {
+  return eliminarVenta(id);
 }

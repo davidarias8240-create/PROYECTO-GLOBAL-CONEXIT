@@ -1,6 +1,6 @@
 <?php
 $host = "localhost";
-$db   = "netware";
+$db   = "mini_erp";
 $user = "root";
 $pass = ""; // sin contraseña
 

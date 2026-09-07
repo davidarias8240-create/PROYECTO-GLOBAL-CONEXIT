@@ -20,6 +20,9 @@ function Sidebar() {
                 <li className="nav-item">
                     <NavLink className="nav-link text-white" to="/ventas">Ventas</NavLink>
                 </li>
+                <li className="nav-item">
+                    <NavLink className="nav-link text-white" to="/facturas">Facturas</NavLink>
+                </li>
             </ul>
         </div>
     );
