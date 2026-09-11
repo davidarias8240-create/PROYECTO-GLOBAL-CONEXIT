@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost/globalconexit/backend";
+const BASE_URL = "http://localhost/PROYECTO-GLOBAL-CONEXIT/backend";
 
 export async function obtenerClientes() {
   try {
