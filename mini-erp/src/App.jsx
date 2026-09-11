@@ -4,6 +4,8 @@ import Login from "./pages/login";
 import Clientes from "./pages/clientes";
 import Productos from "./pages/productos";
 import Ventas from "./pages/ventas";
+import Facturas from "./pages/facturas";
+import Home from "./pages/home";
 import DashboardLayout from "./layouts/DashboardLayout";
 
 function App() {
