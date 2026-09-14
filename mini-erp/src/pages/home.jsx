@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 
 const plans = [
@@ -34,6 +35,69 @@ const portalItems = [
 ];
 
 function Home() {
+	const speedTestRef = useRef(null);
+	const [speedTest, setSpeedTest] = useState({ status: "ready", progress: 0, download: 0, upload: 0, latency: 0, error: "" });
+
+	useEffect(() => {
+		const test = new SpeedTest({
+			autoStart: false,
+			measurements: [
+				{ type: "latency", numPackets: 8 },
+				{ type: "download", bytes: 1e5, count: 1, bypassMinDuration: true },
+				{ type: "latency", numPackets: 8 },
+				{ type: "download", bytes: 1e6, count: 4 },
+				{ type: "upload", bytes: 1e6, count: 4 },
+				{ type: "download", bytes: 1e7, count: 3 },
+				{ type: "upload", bytes: 1e7, count: 3 },
+			],
+		});
+		speedTestRef.current = test;
+
+		const readResult = (results, getter) => {
+			try {
+				const value = results[getter]();
+				return Number.isFinite(value) ? value : 0;
+			} catch {
+				return 0;
+			}
+		};
+		const updateResults = (results) => setSpeedTest((current) => ({
+			...current,
+			download: Math.round(readResult(results, "getDownloadBandwidth") / 100000) / 10,
+			upload: Math.round(readResult(results, "getUploadBandwidth") / 100000) / 10,
+			latency: Math.round(readResult(results, "getUnloadedLatency")),
+		}));
+
+		test.onRunningChange = (running) => setSpeedTest((current) => ({ ...current, status: running ? "running" : current.status }));
+		test.onResultsChange = ({ type }) => {
+			const progressByType = { latency: 25, download: 65, upload: 90 };
+			updateResults(test.results);
+			setSpeedTest((current) => ({ ...current, progress: Math.max(current.progress, progressByType[type] || current.progress) }));
+		};
+		test.onFinish = (results) => {
+			updateResults(results);
+			setSpeedTest((current) => ({ ...current, status: "finished", progress: 100 }));
+		};
+		test.onError = (error) => setSpeedTest((current) => ({ ...current, status: "error", error: String(error) }));
+
+		return () => {
+			test.pause();
+			speedTestRef.current = null;
+		};
+	}, []);
+
+	const startSpeedTest = () => {
+		const test = speedTestRef.current;
+		if (!test || speedTest.status === "running") return;
+		if (test.isFinished) test.restart();
+		setSpeedTest({ status: "running", progress: 8, download: 0, upload: 0, latency: 0, error: "" });
+		test.play();
+	};
+
+	const isTesting = speedTest.status === "running";
+	const gaugeValue = speedTest.download || speedTest.upload || 0;
+	const gaugeAngle = Math.min(90, Math.max(-90, -90 + (gaugeValue / 700) * 180));
+
 	return (
 		<div className="landing-page">
 			<style>{`
@@ -78,13 +142,21 @@ function Home() {
 				.featured .primary-button { background:linear-gradient(90deg, var(--gold), var(--orange)); color:var(--ink); }
 				.diagnostic { background:#fff; }
 				.diagnostic-grid { max-width:975px; margin:auto; display:grid; grid-template-columns:1fr 1.25fr; gap:80px; align-items:center; }
-				.meter { background:#fcfaf4; border:1px solid #e5ded0; border-radius:22px; padding:34px 30px 28px; text-align:center; box-shadow:0 12px 20px #21160a12; }
+				.meter { background:#fcfaf4; border:1px solid #e5ded0; border-radius:22px; padding:28px 30px 24px; text-align:center; box-shadow:0 12px 20px #21160a12; }
 				.meter-label { color:#a5998b; font-weight:700; font-size:12px; letter-spacing:.06em; }
-				.gauge { width:220px; height:112px; margin:25px auto 15px; border:10px solid #e1d8c9; border-bottom:0; border-radius:220px 220px 0 0; position:relative; }
-				.gauge:after { content:""; width:8px; height:105px; position:absolute; background:var(--ink); left:50%; bottom:-4px; transform-origin:bottom; transform:rotate(42deg); border-radius:5px; }
-				.gauge-value { position:absolute; left:0; right:0; bottom:-9px; font-size:25px; font-weight:800; }
+				.gauge { width:250px; height:142px; margin:17px auto 7px; position:relative; }
+				.gauge svg { display:block; width:100%; height:100%; overflow:visible; }
+				.gauge-track, .gauge-progress { fill:none; stroke-width:15; stroke-linecap:round; }
+				.gauge-track { stroke:#e1d8c9; }
+				.gauge-progress { stroke:var(--orange); stroke-dasharray:var(--gauge-progress) 1; transition:stroke-dasharray .5s ease; }
+				.gauge-needle { position:absolute; left:50%; bottom:13px; width:5px; height:83px; border-radius:5px; background:var(--ink); transform-origin:50% 100%; transition:transform .5s ease; }
+				.gauge-center { position:absolute; left:50%; bottom:7px; width:14px; height:14px; border-radius:50%; background:var(--ink); transform:translateX(-50%); }
+				.gauge-value { position:absolute; left:0; right:0; bottom:22px; font-size:25px; font-weight:800; }
+				.gauge-value small { color:#a5998b; font-size:10px; letter-spacing:.08em; }
 				.meter-stats { display:flex; justify-content:space-around; color:#a2988d; font-size:12px; }
 				.meter-stats strong { display:block; color:var(--orange); font-size:15px; margin-top:7px; }
+				.speed-status { min-height:18px; margin:8px 0 0; color:#8d8174; font-size:12px; }
+				.speed-status.error { color:#c24d32; }
 				.diagnostic-copy .section-title { text-align:left; }
 				.benefit { display:flex; gap:14px; padding:16px 18px; margin-top:14px; background:#fcfaf5; border:1px solid #e7dfd2; border-radius:13px; }
 				.benefit-icon { font-size:22px; }
@@ -132,7 +204,7 @@ function Home() {
 					<div className="plans">{plans.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.name}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><a className="primary-button" href="#portal">Contratar ahora →</a></article>)}</div>
 				</section>
 
-				<section className="section diagnostic"><div className="diagnostic-grid"><div><div className="meter"><span className="meter-label">VELOCIDAD DE DESCARGA</span><div className="gauge"><span className="gauge-value">0<br /><small>MBPS</small></span></div><div className="meter-stats"><div>↓ Descarga<strong>0 Mbps</strong></div><div>↑ Subida<strong>—</strong></div><div>Latencia<strong>—</strong></div></div></div><button className="primary-button" style={{ display:"flex", margin:"24px auto 0" }}>⚡ Test de Velocidad</button></div><div className="diagnostic-copy"><span className="eyebrow">Diagnóstico en tiempo real</span><h2 className="section-title">¿Qué tan rápida<br /><span className="accent">es tu red</span> hoy?</h2><p className="section-subtitle">Con nuestra herramienta integrada mide tu velocidad de descarga, subida y latencia desde el portal, sin instalar nada.</p><div className="benefit"><span className="benefit-icon">🎮</span><div><strong>Gaming sin lag</strong><span>Latencia menor a 5 ms para una experiencia impecable.</span></div></div><div className="benefit"><span className="benefit-icon">📺</span><div><strong>Streaming en 4K</strong><span>Velocidad para múltiples streams en alta definición.</span></div></div><div className="benefit"><span className="benefit-icon">🏠</span><div><strong>Todos tus dispositivos</strong><span>Wi-Fi 6 para hasta 50 dispositivos sin perder rendimiento.</span></div></div></div></div></section>
+				<section className="section diagnostic"><div className="diagnostic-grid"><div><div className="meter"><span className="meter-label">VELOCIDAD DE DESCARGA</span><div className="gauge" style={{ "--gauge-progress": Math.min(gaugeValue / 700, 1) }}><svg viewBox="0 0 250 142" aria-hidden="true"><path className="gauge-track" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /><path className="gauge-progress" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /></svg><span className="gauge-needle" style={{ transform: `rotate(${gaugeAngle}deg)` }} /><span className="gauge-center" /><span className="gauge-value">{gaugeValue || 0}<br /><small>MBPS</small></span></div><div className="meter-stats"><div>↓ Descarga<strong>{speedTest.download || "—"} Mbps</strong></div><div>↑ Subida<strong>{speedTest.upload || "—"} Mbps</strong></div><div>Latencia<strong>{speedTest.latency || "—"} ms</strong></div></div><p className={`speed-status${speedTest.status === "error" ? " error" : ""}`}>{speedTest.error || (isTesting ? `Analizando tu conexión... ${speedTest.progress}%` : speedTest.status === "finished" ? "Medición completada con Cloudflare" : "Presiona el botón para comenzar")}</p></div><button className="primary-button" style={{ display:"flex", margin:"24px auto 0" }} onClick={startSpeedTest} disabled={isTesting}>{isTesting ? "Midiendo conexión..." : speedTest.status === "finished" ? "↻ Repetir test" : "⚡ Test de velocidad"}</button></div><div className="diagnostic-copy"><span className="eyebrow">Diagnóstico en tiempo real</span><h2 className="section-title">¿Qué tan rápida<br /><span className="accent">es tu red</span> hoy?</h2><p className="section-subtitle">Con nuestra herramienta integrada mide tu velocidad de descarga, subida y latencia desde el portal, sin instalar nada.</p><div className="benefit"><span className="benefit-icon">🎮</span><div><strong>Gaming sin lag</strong><span>Latencia menor a 5 ms para una experiencia impecable.</span></div></div><div className="benefit"><span className="benefit-icon">📺</span><div><strong>Streaming en 4K</strong><span>Velocidad para múltiples streams en alta definición.</span></div></div><div className="benefit"><span className="benefit-icon">🏠</span><div><strong>Todos tus dispositivos</strong><span>Wi-Fi 6 para hasta 50 dispositivos sin perder rendimiento.</span></div></div></div></div></section>
 
 				<section className="section portal-section" id="portal"><div className="section-heading"><span className="eyebrow">Portal de Clientes</span><h2 className="section-title">Gestiona tu servicio<br /><span className="accent">desde donde estés</span></h2><p className="section-subtitle">Control total de tu plan, facturas y soporte, en un solo lugar, disponible 24/7.</p></div><div className="portal-cards">{portalItems.map(([icon, title, text]) => <article className="portal-card" key={title}><div className="portal-icon">{icon}</div><h3>{title}</h3><p>{text}</p><a href="/login">Acceder&nbsp; ›</a></article>)}</div><div className="portal-banner"><div><span className="eyebrow">Tu portal, siempre disponible</span><h2>Un clic y tienes el control</h2><p>Ingresa con tu número de celular y contraseña para acceder a todas las funcionalidades de tu cuenta.</p><div className="banner-buttons"><a className="primary-button" href="/login">Ingresar al Portal →</a><a className="primary-button secondary-button" href="/login">Registrarme</a></div></div><div className="portal-preview">Plan Familiar 300 Mbps<br /><strong>296 Mbps</strong>&nbsp;&nbsp; <strong>143 Mbps</strong></div></div></section>
 			</main>
