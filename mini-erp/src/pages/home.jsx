@@ -34,21 +34,13 @@ const portalItems = [
 ];
 
 function Home() {
-	const [address, setAddress] = useState("");
-	const [message, setMessage] = useState("");
-
-	function checkCoverage(event) {
-		event.preventDefault();
-		setMessage(address.trim() ? "Estamos validando la cobertura en tu zona." : "Ingresa una dirección para validar cobertura.");
-	}
-
 	return (
 		<div className="landing-page">
 			<style>{`
 				.landing-page { --ink:#181817; --orange:#ef7410; --gold:#ffb91f; --cream:#f5efdf; --paper:#fffdfa; --muted:#766e67; min-height:100vh; color:var(--ink); background:var(--cream); font-family:Arial, Helvetica, sans-serif; }
 				.landing-page * { box-sizing:border-box; }
 				.landing-nav { height:66px; display:flex; align-items:center; justify-content:space-between; gap:28px; padding:0 max(28px, calc((100% - 1165px) / 2)); background:#fffefa; position:sticky; top:0; z-index:5; border-bottom:1px solid #eee8db; }
-				.landing-logo { width:88px; height:32px; object-fit:contain; filter:brightness(0); }
+				.landing-logo { width:150px; height:52px; object-fit:contain; filter:brightness(0); }
 				.landing-links { display:flex; gap:30px; margin-left:auto; margin-right:auto; }
 				.landing-links a { color:#595550; text-decoration:none; font-size:14px; }
 				.portal-button, .primary-button { border:0; border-radius:24px; background:var(--ink); color:white; font-weight:700; cursor:pointer; padding:12px 24px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
@@ -59,10 +51,6 @@ function Home() {
 				.hero h1, .section-title { font-size:clamp(48px, 6vw, 78px); line-height:.96; letter-spacing:-3px; margin:0 0 25px; font-weight:900; }
 				.accent { color:var(--orange); }
 				.hero p { color:#6d6660; font-size:19px; line-height:1.65; max-width:640px; margin:0 0 34px; }
-				.coverage-form { width:min(635px, 100%); display:flex; padding:6px; background:white; border:1px solid #ddd8cf; border-radius:16px; box-shadow:0 5px 10px #00000012; }
-				.coverage-form input { min-width:0; flex:1; border:0; outline:0; padding:0 15px; color:#777; font-size:14px; }
-				.coverage-form button { border:0; border-radius:12px; background:var(--orange); color:white; font-weight:700; padding:14px 24px; cursor:pointer; }
-				.coverage-message { color:var(--orange); font-size:13px; min-height:18px; margin:8px 0 0 12px; }
 				.hero-stats { display:flex; gap:48px; margin-top:28px; }
 				.hero-stats strong { display:block; font-size:28px; }
 				.hero-stats span { color:#9a8f84; font-size:13px; }
@@ -121,22 +109,22 @@ function Home() {
 				.footer h3 { color:white; font-size:16px; margin:8px 0 25px; }
 				.footer p, .footer a { color:#aa9d92; line-height:1.6; font-size:15px; text-decoration:none; display:block; margin:0 0 13px; }
 				.footer-bottom { border-top:1px solid #32312f; margin-top:55px; padding-top:24px; display:flex; justify-content:space-between; gap:20px; font-size:14px; }
-				.whatsapp { position:fixed; z-index:8; right:24px; bottom:20px; width:54px; height:54px; display:grid; place-items:center; border-radius:50%; background:#20d267; color:white; font-size:28px; box-shadow:0 5px 20px #20d26766; text-decoration:none; }
+				.whatsapp { position:fixed; z-index:8; right:24px; bottom:20px; width:54px; height:54px; display:grid; place-items:center; border-radius:50%; background:linear-gradient(180deg, #25d366 0%, #1ebf5c 100%); color:white; box-shadow:0 8px 22px rgba(37, 211, 102, 0.45); text-decoration:none; transition:transform .2s ease, box-shadow .2s ease; }
+				.whatsapp:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(37, 211, 102, 0.55); }
+				.whatsapp svg { display:block; width:28px; height:28px; }
 				@media (max-width:800px) { .landing-nav { padding:0 18px; } .landing-links { display:none; } .hero-inner { padding:60px 22px; } .hero h1 { font-size:52px; } .hero:after { opacity:.18; width:100%; } .plans, .diagnostic-grid, .portal-cards, .footer-grid { grid-template-columns:1fr; } .plan.featured { transform:none; } .diagnostic-grid { gap:35px; } .diagnostic-copy .section-title { font-size:38px; } .portal-banner { margin:35px 0 0; padding:30px 24px; flex-direction:column; align-items:flex-start; } .footer-bottom { flex-direction:column; } }
 			`}</style>
 
 			<header className="landing-nav">
 				<img className="landing-logo" src={logo} alt="Global Conexit" />
-				<nav className="landing-links"><a href="#planes">Planes</a><a href="#cobertura">Cobertura</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
+				<nav className="landing-links"><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
 				<a className="portal-button" href="/login">♟&nbsp; Mi Portal / Ingresar</a>
 			</header>
 
 			<main>
-				<section className="hero" id="cobertura"><div className="hero-inner"><div className="hero-copy">
+				<section className="hero" id="inicio"><div className="hero-inner"><div className="hero-copy">
 					<h1>Navega a la<br /><span className="accent">velocidad</span><br />de la <span className="accent">luz</span></h1>
 					<p>Fibra óptica con estabilidad garantizada del <strong>99,9%</strong>, latencia ultra-baja y velocidades simétricas que transforman tu experiencia digital: hogar, oficina o gaming.</p>
-					<form className="coverage-form" onSubmit={checkCoverage}><input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Ingresa tu dirección para validar cobertura..." /><button type="submit">Verificar Cobertura</button></form>
-					<div className="coverage-message">{message}</div>
 					<div className="hero-stats"><div><strong>+50.000</strong><span>Clientes activos</span></div><div><strong>99.9%</strong><span>Uptime garantizado</span></div><div><strong>24/7</strong><span>Soporte técnico</span></div></div>
 				</div></div></section>
 
@@ -149,8 +137,12 @@ function Home() {
 				<section className="section portal-section" id="portal"><div className="section-heading"><span className="eyebrow">Portal de Clientes</span><h2 className="section-title">Gestiona tu servicio<br /><span className="accent">desde donde estés</span></h2><p className="section-subtitle">Control total de tu plan, facturas y soporte, en un solo lugar, disponible 24/7.</p></div><div className="portal-cards">{portalItems.map(([icon, title, text]) => <article className="portal-card" key={title}><div className="portal-icon">{icon}</div><h3>{title}</h3><p>{text}</p><a href="/login">Acceder&nbsp; ›</a></article>)}</div><div className="portal-banner"><div><span className="eyebrow">Tu portal, siempre disponible</span><h2>Un clic y tienes el control</h2><p>Ingresa con tu número de celular y contraseña para acceder a todas las funcionalidades de tu cuenta.</p><div className="banner-buttons"><a className="primary-button" href="/login">Ingresar al Portal →</a><a className="primary-button secondary-button" href="/login">Registrarme</a></div></div><div className="portal-preview">Plan Familiar 300 Mbps<br /><strong>296 Mbps</strong>&nbsp;&nbsp; <strong>143 Mbps</strong></div></div></section>
 			</main>
 
-			<footer className="footer" id="soporte"><div className="footer-grid"><div><img className="footer-logo" src={logo} alt="Global Conexit" /><p>Conectando vidas con fibra óptica de última generación. Velocidad, estabilidad y confianza en cada megabyte.</p></div><div><h3>Servicios</h3><a href="#planes">Planes de Internet</a><a href="#cobertura">Verificar Cobertura</a><a href="#soporte">Internet Empresarial</a><a href="#soporte">Soporte Técnico</a></div><div><h3>Empresa</h3><a href="#portal">Quiénes somos</a><a href="#portal">Nuestro equipo</a><a href="#portal">Trabaja con nosotros</a><a href="#portal">Noticias</a></div><div><h3>Contacto</h3><p>☎ +57 601 800 9000<br />Línea nacional gratuita</p><p>✉ soporte@globalconexit.com<br />Soporte técnico</p><p>⌖ Cra. 15 #93-75, Bogotá</p></div></div><div className="footer-bottom"><span>© 2026 Global Conexit S.A.S. NIT 900.123.456-7. Todos los derechos reservados.</span><span>Política de privacidad - Términos de uso - Cookies</span></div></footer>
-			<a className="whatsapp" href="https://wa.me/576018000000" aria-label="Contactar por WhatsApp">◔</a>
+			<footer className="footer" id="soporte"><div className="footer-grid"><div><img className="footer-logo" src={logo} alt="Global Conexit" /><p>Conectando vidas con fibra óptica de última generación. Velocidad, estabilidad y confianza en cada megabyte.</p></div><div><h3>Servicios</h3><a href="#planes">Planes de Internet</a><a href="#soporte">Internet Empresarial</a><a href="#soporte">Soporte Técnico</a></div><div><h3>Empresa</h3><a href="#portal">Quiénes somos</a><a href="#portal">Nuestro equipo</a><a href="#portal">Trabaja con nosotros</a><a href="#portal">Noticias</a></div><div><h3>Contacto</h3><p>☎ +57 601 800 9000<br />Línea nacional gratuita</p><p>✉ soporte@globalconexit.com<br />Soporte técnico</p><p>⌖ Cra. 15 #93-75, Bogotá</p></div></div><div className="footer-bottom"><span>© 2026 Global Conexit S.A.S. NIT 900.123.456-7. Todos los derechos reservados.</span><span>Política de privacidad - Términos de uso - Cookies</span></div></footer>
+			<a className="whatsapp" href="https://wa.me/576018000000" aria-label="Contactar por WhatsApp" target="_blank" rel="noreferrer">
+				<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+					<path fill="currentColor" d="M19.05 4.95A9.87 9.87 0 0 0 12.01 2C6.5 2 2.03 6.47 2.03 11.98c0 1.74.46 3.44 1.33 4.94L2 22l5.18-1.35a9.95 9.95 0 0 0 4.83 1.3h.01c5.51 0 9.98-4.47 9.98-9.97 0-2.67-1.04-5.18-2.95-7.03Zm-7.04 15.2h-.01a8.22 8.22 0 0 1-4.19-1.15l-.3-.18-3.07.8.82-2.99-.19-.31a8.25 8.25 0 0 1-1.26-4.38c0-4.57 3.72-8.29 8.31-8.29a8.27 8.27 0 0 1 8.31 8.28c0 4.57-3.72 8.29-8.31 8.29Zm4.56-6.2c-.25-.12-1.48-.73-1.71-.82-.23-.09-.39-.12-.56.12-.16.24-.63.82-.78.99-.14.16-.29.18-.54.06-.25-.12-1.05-.39-2-1.24-.74-.66-1.24-1.48-1.38-1.73-.15-.25-.02-.38.11-.51.11-.11.25-.29.37-.43.12-.14.16-.25.25-.42.08-.16.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.16 0-.43.06-.66.31-.23.25-.87.85-.87 2.07 0 1.22.89 2.4.01 3.44l.01.01c.12.15 1.8 2.74 4.37 3.84.61.26 1.08.41 1.45.53.61.19 1.17.17 1.61.1.49-.07 1.48-.6 1.69-1.18.21-.58.21-1.08.15-1.18-.06-.09-.22-.15-.47-.27Z"/>
+				</svg>
+			</a>
 		</div>
 	);
 }
