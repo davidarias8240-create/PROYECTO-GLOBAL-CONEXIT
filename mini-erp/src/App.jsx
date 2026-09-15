@@ -5,6 +5,7 @@ import Clientes from "./pages/clientes";
 import Productos from "./pages/productos";
 import Ventas from "./pages/ventas";
 import Facturas from "./pages/facturas";
+import Ordenes from "./pages/ordenes";
 import Home from "./pages/home";
 import DashboardLayout from "./layouts/DashboardLayout";
 
@@ -38,6 +39,12 @@ function App() {
                 <Route path="/facturas" element={
                         <DashboardLayout>
                             <Facturas />
+                        </DashboardLayout>
+                    }/>
+
+                <Route path="/ordenes" element={
+                        <DashboardLayout>
+                            <Ordenes />
                         </DashboardLayout>
                     }/>
             </Routes>

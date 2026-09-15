@@ -58,6 +58,10 @@ export async function obtenerVentas() {
   }
 }
 
+export async function obtenerOrdenes() {
+  return obtenerVentas();
+}
+
 export async function obtenerFacturas() {
   return obtenerVentas();
 }
@@ -78,6 +82,10 @@ export async function crearVenta(venta) {
     body: JSON.stringify(venta),
   });
   return response.json();
+}
+
+export async function crearOrden(orden) {
+  return crearVenta(orden);
 }
 
 export async function crearFactura(factura) {
@@ -112,6 +120,10 @@ export async function editarVenta(venta) {
   return response.json();
 }
 
+export async function editarOrden(orden) {
+  return editarVenta(orden);
+}
+
 export async function editarFactura(factura) {
   return editarVenta(factura);
 }
@@ -141,6 +153,10 @@ export async function eliminarVenta(id) {
     body: JSON.stringify({ id }),
   });
   return response.json();
+}
+
+export async function eliminarOrden(id) {
+  return eliminarVenta(id);
 }
 
 export async function eliminarFactura(id) {

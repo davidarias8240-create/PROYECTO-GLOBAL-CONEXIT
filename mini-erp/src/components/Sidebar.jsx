@@ -23,6 +23,9 @@ function Sidebar() {
                 <li className="nav-item">
                     <NavLink className="nav-link text-white" to="/facturas">Facturas</NavLink>
                 </li>
+                <li className="nav-item">
+                    <NavLink className="nav-link text-white" to="/ordenes">Ordenes</NavLink>
+                </li>
             </ul>
         </div>
     );
