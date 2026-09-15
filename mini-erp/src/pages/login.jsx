@@ -1,9 +1,9 @@
-import {FormLogin} from "../components/FormLogin.jsx"
+import FormAdmin from "../components/FormAdmin.jsx";
 
 
 function Login() {
   return(
-    <FormLogin></FormLogin>
+    <FormAdmin />
   );
 }
 

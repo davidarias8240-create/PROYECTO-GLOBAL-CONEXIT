@@ -471,20 +471,19 @@ main > * {
 .client-login-brand {
   display: grid;
   place-items: center;
-  width: 70px;
-  height: 70px;
+  width: 112px;
+  height: 52px;
   margin: 0 auto 22px;
   overflow: hidden;
-  border-radius: 18px;
-  background: var(--client-orange);
-  box-shadow: 0 12px 25px rgba(239, 116, 16, .2);
+  border-radius: 0;
+  background: #fff;
 }
 
 .client-login-brand img {
-  width: 62px;
-  height: 50px;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  filter: brightness(0);
 }
 
 .client-login-close {
@@ -575,8 +574,8 @@ main > * {
 
 @media (max-height: 760px) {
   .client-login-card { padding: 22px 34px 20px; }
-  .client-login-brand { width: 56px; height: 56px; margin-bottom: 12px; border-radius: 15px; }
-  .client-login-brand img { width: 50px; height: 42px; }
+  .client-login-brand { width: 112px; height: 52px; margin-bottom: 12px; border-radius: 0; }
+  .client-login-brand img { width: 100%; height: 100%; }
   .client-login-card h1 { font-size: 26px; }
   .client-login-card > p { margin: 5px 0 17px; }
   .client-login-card label { margin: 10px 0 5px; font-size: 12px; }
@@ -585,3 +584,32 @@ main > * {
   .client-login-submit { height: 48px; margin-top: 14px; }
   .client-login-register { margin-top: 14px !important; font-size: 13px !important; }
 }
+
+.client-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 16px;
+  background: rgba(17, 17, 17, 0.58);
+  backdrop-filter: blur(3px);
+}
+
+.client-login-overlay .client-login-card {
+  flex: 0 0 auto;
+}
+
+.portal-card button {
+  padding: 0;
+  border: 0;
+  color: var(--orange);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.portal-card button:hover { text-decoration: underline; }
