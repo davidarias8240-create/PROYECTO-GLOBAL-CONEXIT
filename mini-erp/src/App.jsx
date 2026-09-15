@@ -7,7 +7,7 @@ import Ventas from "./pages/ventas";
 import Facturas from "./pages/facturas";
 import Home from "./pages/home";
 import DashboardLayout from "./layouts/DashboardLayout";
-import PortalClienteModal from "./components/PortalClienteModal";
+import ClientPortal from "./pages/interfazcliente";
 
 function App() {
     return (
@@ -15,9 +15,7 @@ function App() {
             <Routes>
                 <Route path="/" element={<Home />} />
 
-                <Route path="/cliente" element={<PortalClienteModal />} />
-
-                <Route path="/login" element={<PortalClienteModal />} />
+                <Route path="/cliente" element={<ClientPortal />} />
 
                 <Route path="/clientes" element={
                         <DashboardLayout>
