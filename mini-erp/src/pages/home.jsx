@@ -190,7 +190,7 @@ function Home() {
 			<header className="landing-nav">
 				<img className="landing-logo" src={logo} alt="Global Conexit" />
 				<nav className="landing-links"><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
-				<a className="portal-button" href="/login">♟&nbsp; Mi Portal / Ingresar</a>
+				<a className="portal-button" href="/cliente">♟&nbsp; Mi Portal / Ingresar</a>
 			</header>
 
 			<main>
