@@ -106,15 +106,21 @@ function Home() {
 			<style>{`
 				.landing-page { --ink:#181817; --orange:#ef7410; --gold:#ffb91f; --cream:#f5efdf; --paper:#fffdfa; --muted:#766e67; min-height:100vh; color:var(--ink); background:var(--cream); font-family:Arial, Helvetica, sans-serif; }
 				.landing-page * { box-sizing:border-box; }
-				.landing-nav { height:66px; display:flex; align-items:center; justify-content:space-between; gap:28px; padding:0 max(28px, calc((100% - 1165px) / 2)); background:#fffefa; position:sticky; top:0; z-index:5; border-bottom:1px solid #eee8db; }
-				.landing-logo { width:150px; height:52px; object-fit:contain; filter:brightness(0); }
-				.landing-links { display:flex; gap:30px; margin-left:auto; margin-right:auto; }
-				.landing-links a { color:#595550; text-decoration:none; font-size:14px; }
+				.landing-nav { height:74px; display:flex; align-items:center; gap:34px; padding:0 max(22px, calc((100% - 1165px) / 2)); background:#fffefa; position:sticky; top:0; z-index:5; border-bottom:1px solid #eee8db; }
+				.landing-logo { width:172px; height:58px; object-fit:contain; filter:brightness(0); flex:0 0 auto; }
+				.landing-links { display:flex; align-items:center; gap:30px; margin-left:18px; }
+				.landing-links a { position:relative; padding:27px 0 24px; color:#595550; text-decoration:none; font-size:14px; font-weight:600; transition:color .28s ease; }
+				.landing-links a::after { content:""; position:absolute; right:0; bottom:16px; left:0; height:3px; border-radius:3px; background:linear-gradient(90deg, var(--orange), var(--gold)); transform:scaleX(0); transform-origin:center; transition:transform .48s ease; }
+				.landing-links a:hover, .landing-links a:focus-visible { color:#050505; }
+				.landing-links a:hover::after, .landing-links a:focus-visible::after { transform:scaleX(1); }
 				.portal-button, .primary-button { border:0; border-radius:24px; background:var(--ink); color:white; font-weight:700; cursor:pointer; padding:12px 24px; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+				.portal-button { margin-left:auto; font-family:"Aptos", "Segoe UI", sans-serif; letter-spacing:.01em; white-space:nowrap; }
 				.hero { min-height:620px; position:relative; overflow:hidden; background:radial-gradient(circle at 17% 75%, #fff8df 0, transparent 28%), radial-gradient(circle at 83% 30%, #e5e9e5 0, transparent 37%), #fffefa; }
-				.hero:after { content:""; position:absolute; right:-4%; top:0; width:54%; height:100%; opacity:.45; background:linear-gradient(125deg, transparent 10%, #d5d9d4 40%, #eef1ed 63%, transparent 64%), radial-gradient(ellipse at 72% 60%, #d5dcd9 0 10%, transparent 11%); filter:blur(3px); }
-				.hero-inner { max-width:1165px; min-height:620px; margin:auto; padding:72px 0 55px; position:relative; z-index:1; }
+				.hero-inner { max-width:1165px; min-height:620px; margin:auto; padding:58px 0 55px; position:relative; z-index:1; }
+				.hero-layout { min-height:507px; display:grid; grid-template-columns:minmax(0, .92fr) minmax(390px, 1.08fr); align-items:center; gap:62px; }
 				.hero-copy { max-width:650px; }
+				.hero-visual { position:relative; min-height:430px; mask-image:linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 10%, #000 90%, transparent 100%); mask-composite:intersect; -webkit-mask-image:linear-gradient(90deg, transparent 0%, #000 12%, #000 88%, transparent 100%), linear-gradient(180deg, transparent 0%, #000 10%, #000 90%, transparent 100%); -webkit-mask-composite:source-in; }
+				.hero-visual img { display:block; width:100%; height:100%; min-height:430px; object-fit:cover; }
 				.hero h1, .section-title { font-size:clamp(48px, 6vw, 78px); line-height:.96; letter-spacing:-3px; margin:0 0 25px; font-weight:900; }
 				.accent { color:var(--orange); }
 				.hero p { color:#6d6660; font-size:19px; line-height:1.65; max-width:640px; margin:0 0 34px; }
@@ -189,21 +195,21 @@ function Home() {
 				.whatsapp svg { display:block; width:28px; height:28px; }
 				.admin-access { position:fixed; left:12px; bottom:12px; z-index:9; padding:9px 14px; border-radius:8px; color:white; background:var(--ink); font-size:12px; font-weight:700; text-decoration:none; opacity:0; pointer-events:auto; transition:opacity .2s ease, transform .2s ease; transform:translateY(4px); }
 				.admin-access:hover, .admin-access:focus-visible { opacity:1; transform:translateY(0); outline:2px solid var(--gold); outline-offset:3px; }
-				@media (max-width:800px) { .landing-nav { padding:0 18px; } .landing-links { display:none; } .hero-inner { padding:60px 22px; } .hero h1 { font-size:52px; } .hero:after { opacity:.18; width:100%; } .plans, .diagnostic-grid, .portal-cards, .footer-grid { grid-template-columns:1fr; } .plan.featured { transform:none; } .diagnostic-grid { gap:35px; } .diagnostic-copy .section-title { font-size:38px; } .portal-banner { margin:35px 0 0; padding:30px 24px; flex-direction:column; align-items:flex-start; } .footer-bottom { flex-direction:column; } }
+				@media (max-width:800px) { .landing-nav { gap:12px; padding:0 18px; } .landing-logo { width:136px; height:52px; } .landing-links { display:none; } .portal-button { padding:11px 16px; font-size:13px; } .hero-inner { padding:48px 22px 55px; } .hero-layout { grid-template-columns:1fr; gap:34px; } .hero h1 { font-size:52px; } .hero-visual { min-height:300px; } .hero-visual img { min-height:300px; } .plans, .diagnostic-grid, .portal-cards, .footer-grid { grid-template-columns:1fr; } .plan.featured { transform:none; } .diagnostic-grid { gap:35px; } .diagnostic-copy .section-title { font-size:38px; } .portal-banner { margin:35px 0 0; padding:30px 24px; flex-direction:column; align-items:flex-start; } .footer-bottom { flex-direction:column; } }
 			`}</style>
 
 			<header className="landing-nav">
 				<img className="landing-logo" src={logo} alt="Global Conexit" />
-				<nav className="landing-links"><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
+				<nav className="landing-links"><a href="#inicio">Inicio</a><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
 				<button className="portal-button" type="button" onClick={() => setShowClientLogin(true)}>♟&nbsp; Mi Portal / Ingresar</button>
 			</header>
 
 			<main>
-				<section className="hero" id="inicio"><div className="hero-inner"><div className="hero-copy">
+				<section className="hero" id="inicio"><div className="hero-inner"><div className="hero-layout"><div className="hero-copy">
 					<h1>Navega a la<br /><span className="accent">velocidad</span><br />de la <span className="accent">luz</span></h1>
 					<p>Fibra óptica con estabilidad garantizada del <strong>99,9%</strong>, latencia ultra-baja y velocidades simétricas que transforman tu experiencia digital: hogar, oficina o gaming.</p>
 					<div className="hero-stats"><div><strong>+50.000</strong><span>Clientes activos</span></div><div><strong>99.9%</strong><span>Uptime garantizado</span></div><div><strong>24/7</strong><span>Soporte técnico</span></div></div>
-				</div></div></section>
+				</div><div className="hero-visual"><img src="/subfondo.jpeg" alt="Router de fibra óptica conectado a una red de alta velocidad" /></div></div></div></section>
 
 				<section className="section" id="planes"><div className="section-heading"><span className="eyebrow">Planes de Internet</span><h2 className="section-title">Elige tu velocidad</h2><p className="section-subtitle">Fibra óptica simétrica, sin costos ocultos y sin letra pequeña.</p></div>
 					<div className="plans">{plans.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.name}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><a className="primary-button" href="#portal">Contratar ahora →</a></article>)}</div>
