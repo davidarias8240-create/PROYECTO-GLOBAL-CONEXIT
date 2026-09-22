@@ -9,16 +9,30 @@ function FormAdmin() {
     };
 
     return (
-        <div className="min-vh-100 d-flex align-items-center justify-content-center" style={{ background: "#f2f4f7" }}>
-            <div className="bg-white rounded-4 shadow-sm p-5" style={{ width: "min(100%, 360px)" }}>
-                <h2 className="mb-4 fw-bold">Mini ERP</h2>
+        <main className="admin-login-page">
+            <div className="admin-login-card">
+                <div className="admin-login-brand">
+                    <span className="admin-login-brand-mark" aria-hidden="true">GC</span>
+                    <span>GLOBAL CONEXIT</span>
+                </div>
+                <div className="admin-login-heading">
+                    <p className="admin-login-eyebrow">Portal administrativo</p>
+                    <h1>Bienvenido de nuevo</h1>
+                    <p>Ingresa tus datos para gestionar tu operación.</p>
+                </div>
                 <form onSubmit={handleSubmit}>
-                    <div className="mb-3 text-start"><label htmlFor="formEmail" className="form-label">Usuario</label><input type="email" id="formEmail" className="form-control form-control-lg" placeholder="Usuario" required /></div>
-                    <div className="mb-4 text-start"><label htmlFor="formPassword" className="form-label">Contraseña</label><input type="password" id="formPassword" className="form-control form-control-lg" placeholder="Contraseña" required /></div>
-                    <button type="submit" className="btn btn-primary w-100 py-2">Iniciar sesión</button>
+                    <div className="admin-login-field">
+                        <label htmlFor="formEmail">Correo electrónico</label>
+                        <input type="email" id="formEmail" placeholder="tu@correo.com" required />
+                    </div>
+                    <div className="admin-login-field">
+                        <label htmlFor="formPassword">Contraseña</label>
+                        <input type="password" id="formPassword" placeholder="Ingresa tu contraseña" required />
+                    </div>
+                    <button type="submit" className="admin-login-submit">Iniciar sesión <span aria-hidden="true">→</span></button>
                 </form>
             </div>
-        </div>
+        </main>
     );
 }
 
