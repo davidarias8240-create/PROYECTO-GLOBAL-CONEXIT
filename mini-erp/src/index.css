@@ -37,6 +37,166 @@ textarea {
   font-family: inherit;
 }
 
+/* Acceso administrativo */
+.admin-login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 48px clamp(24px, 11vw, 180px);
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(3, 14, 30, 0.82) 0%, rgba(3, 16, 34, 0.5) 46%, rgba(3, 14, 30, 0.2) 100%),
+    url("/subfondo.jpeg") center / cover no-repeat;
+}
+
+.admin-login-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 18% 50%, rgba(55, 206, 255, 0.18), transparent 34%);
+}
+
+.admin-login-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 410px);
+  padding: 38px 40px 40px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-radius: 24px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(238, 249, 255, 0.62));
+  box-shadow: 0 28px 70px rgba(0, 7, 20, 0.35), inset 0 1px rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  animation: admin-card-in 0.55s ease both;
+}
+
+.admin-login-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #12344c;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.admin-login-brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(145deg, #087fc1, #35d4f2);
+  box-shadow: 0 7px 16px rgba(8, 127, 193, 0.28);
+  font-size: 1rem;
+}
+
+.admin-login-heading {
+  margin: 38px 0 28px;
+}
+
+.admin-login-eyebrow {
+  margin: 0 0 9px;
+  color: #087fbe;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.admin-login-heading h1 {
+  margin: 0;
+  color: #09243a;
+  font-size: clamp(1.8rem, 4vw, 2.2rem);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+}
+
+.admin-login-heading > p:last-child {
+  margin: 11px 0 0;
+  color: #4e6575;
+  font-size: 0.93rem;
+  line-height: 1.5;
+}
+
+.admin-login-field {
+  margin-bottom: 18px;
+}
+
+.admin-login-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: #17364b;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.admin-login-field input {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid rgba(33, 102, 133, 0.22);
+  border-radius: 12px;
+  outline: none;
+  color: #0a2940;
+  background: rgba(255, 255, 255, 0.62);
+  font-size: 0.94rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.admin-login-field input::placeholder { color: #78909d; }
+
+.admin-login-field input:focus {
+  border-color: #12a9dc;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 0 0 4px rgba(18, 169, 220, 0.14);
+}
+
+.admin-login-submit {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 26px;
+  padding: 14px 18px;
+  border: 0;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(100deg, #087fc1, #11b7dc);
+  box-shadow: 0 12px 22px rgba(8, 127, 193, 0.25);
+  cursor: pointer;
+  font-size: 0.94rem;
+  font-weight: 800;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-login-submit:hover {
+  box-shadow: 0 15px 28px rgba(8, 127, 193, 0.34);
+  transform: translateY(-2px);
+}
+
+@keyframes admin-card-in {
+  from { opacity: 0; transform: translateX(-18px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (max-width: 600px) {
+  .admin-login-page {
+    justify-content: center;
+    padding: 24px 16px;
+    background-position: 62% center;
+  }
+
+  .admin-login-card {
+    padding: 30px 24px 32px;
+    border-radius: 20px;
+  }
+}
+
 /* barra navegacion */
 .navbar {
   display: flex;
