@@ -25,9 +25,18 @@ html, body, #root {
 
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
   background: linear-gradient(180deg, #f5efe6 0%, #f1eadf 100%);
   color: var(--text);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: "Exo 2", "Inter", sans-serif;
 }
 
 button,
@@ -35,6 +44,15 @@ input,
 select,
 textarea {
   font-family: inherit;
+}
+
+/* Métricas destacadas y valores financieros */
+.metric-card > strong,
+.invoice-metrics strong,
+.payment-due > b,
+.plan-summary strong {
+  font-family: "Exo 2", "Inter", sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Acceso administrativo */
@@ -462,7 +480,7 @@ main > * {
   display: flex;
   background: var(--client-bg);
   color: #171717;
-  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-family: "Inter", Arial, sans-serif;
 }
 
 .client-modal-backdrop {
