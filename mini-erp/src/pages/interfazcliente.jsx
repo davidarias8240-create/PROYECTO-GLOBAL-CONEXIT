@@ -1,5 +1,5 @@
 import { useState } from "react";
-import logo from "../assets/logo.png";
+import { useNavigate } from "react-router-dom";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
@@ -14,12 +14,13 @@ function StatusPill({ children = "Servicio activo" }) {
 }
 
 function ClientSidebar({ currentView, setCurrentView }) {
+	const navigate = useNavigate();
+
 	return (
 		<aside className="client-sidebar">
-			<div className="client-logo-wrap"><img src={logo} alt="Global Conexit" /></div>
 			<div className="client-profile"><span className="profile-avatar">CA</span><div><strong>Carlos Andrés</strong><small>1.032.456.789</small></div><span className="profile-plan"><i />Plan Familiar 300 Mbps</span></div>
 			<nav className="client-nav" aria-label="Navegación del portal">{menuItems.map((item) => <button className={currentView === item.id ? "active" : ""} key={item.id} onClick={() => setCurrentView(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.badge && <b />}</button>)}</nav>
-			<button className="client-logout" onClick={() => setCurrentView("plan")}><span>⇥</span>Cerrar sesión</button>
+			<button className="client-logout" onClick={() => navigate("/")}><span>⇥</span>Cerrar sesión</button>
 		</aside>
 	);
 }
