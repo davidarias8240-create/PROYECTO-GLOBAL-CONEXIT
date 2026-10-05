@@ -88,7 +88,13 @@ function Clientes() {
           </tr>
         </thead>
         <tbody>
-          {clientes.map((cliente) => (
+          {clientes.length === 0 ? (
+            <tr>
+              <td colSpan="6" className="text-center text-muted">
+                No hay clientes registrados en la base de datos.
+              </td>
+            </tr>
+          ) : clientes.map((cliente) => (
             <tr key={cliente.id}>
               
               <td>{cliente.nombre}</td>
