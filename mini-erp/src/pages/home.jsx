@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 import Formcliente from "../components/Formcliente";
+import PlanCheckout from "../components/PlanCheckout";
 
 const plans = [
 	{
@@ -38,6 +39,7 @@ const portalItems = [
 function Home() {
 	const speedTestRef = useRef(null);
 	const [showClientLogin, setShowClientLogin] = useState(false);
+	const [selectedPlan, setSelectedPlan] = useState(null);
 	const [speedTest, setSpeedTest] = useState({ status: "ready", progress: 0, download: 0, upload: 0, latency: 0, error: "" });
 
 	useEffect(() => {
@@ -103,6 +105,7 @@ function Home() {
 	return (
 		<div className="landing-page">
 			{showClientLogin && <Formcliente onClose={() => setShowClientLogin(false)} />}
+			{selectedPlan && <PlanCheckout plan={selectedPlan} onClose={() => setSelectedPlan(null)} />}
 			<style>{`
 				.landing-page { --ink:#181817; --orange:#ef7410; --gold:#ffb91f; --cream:#f5efdf; --paper:#fffdfa; --muted:#766e67; min-height:100vh; color:var(--ink); background:var(--cream); font-family:"Inter", Arial, sans-serif; }
 				.landing-page * { box-sizing:border-box; }
@@ -214,7 +217,7 @@ function Home() {
 				</div><div className="hero-visual"><img src="/subfondo.jpeg" alt="Router de fibra óptica conectado a una red de alta velocidad" /></div></div></div></section>
 
 				<section className="section" id="planes"><div className="section-heading"><span className="eyebrow">Planes de Internet</span><h2 className="section-title">Elige tu velocidad</h2><p className="section-subtitle">Fibra óptica simétrica, sin costos ocultos y sin letra pequeña.</p></div>
-					<div className="plans">{plans.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.name}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><a className="primary-button" href="#portal">Contratar ahora →</a></article>)}</div>
+					<div className="plans">{plans.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.name}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><button className="primary-button" type="button" onClick={() => setSelectedPlan(plan)}>Contratar ahora →</button></article>)}</div>
 				</section>
 
 				<section className="section diagnostic"><div className="diagnostic-grid"><div><div className="meter"><span className="meter-label">VELOCIDAD DE DESCARGA</span><div className="gauge" style={{ "--gauge-progress": Math.min(gaugeValue / 700, 1) }}><svg viewBox="0 0 250 142" aria-hidden="true"><path className="gauge-track" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /><path className="gauge-progress" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /></svg><span className="gauge-needle" style={{ transform: `rotate(${gaugeAngle}deg)` }} /><span className="gauge-center" /><span className="gauge-value">{gaugeValue || 0}<br /><small>MBPS</small></span></div><div className="meter-stats"><div>↓ Descarga<strong>{speedTest.download || "—"} Mbps</strong></div><div>↑ Subida<strong>{speedTest.upload || "—"} Mbps</strong></div><div>Latencia<strong>{speedTest.latency || "—"} ms</strong></div></div><p className={`speed-status${speedTest.status === "error" ? " error" : ""}`}>{speedTest.error || (isTesting ? `Analizando tu conexión... ${speedTest.progress}%` : speedTest.status === "finished" ? "Medición completada con Cloudflare" : "Presiona el botón para comenzar")}</p></div><button className="primary-button" style={{ display:"flex", margin:"24px auto 0" }} onClick={startSpeedTest} disabled={isTesting}>{isTesting ? "Midiendo conexión..." : speedTest.status === "finished" ? "↻ Repetir test" : "⚡ Test de velocidad"}</button></div><div className="diagnostic-copy"><span className="eyebrow">Diagnóstico en tiempo real</span><h2 className="section-title">¿Qué tan rápida<br /><span className="accent">es tu red</span> hoy?</h2><p className="section-subtitle">Con nuestra herramienta integrada mide tu velocidad de descarga, subida y latencia desde el portal, sin instalar nada.</p><div className="benefit"><span className="benefit-icon">🎮</span><div><strong>Gaming sin lag</strong><span>Latencia menor a 5 ms para una experiencia impecable.</span></div></div><div className="benefit"><span className="benefit-icon">📺</span><div><strong>Streaming en 4K</strong><span>Velocidad para múltiples streams en alta definición.</span></div></div><div className="benefit"><span className="benefit-icon">🏠</span><div><strong>Todos tus dispositivos</strong><span>Wi-Fi 6 para hasta 50 dispositivos sin perder rendimiento.</span></div></div></div></div></section>
