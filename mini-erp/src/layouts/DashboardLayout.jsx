@@ -3,9 +3,9 @@ import Navbar from "../components/Navbar";
 
 function DashboardLayout({ children }) {
     return (
-        <div className="d-flex">
+        <div className="admin-shell d-flex">
             <Sidebar />
-            <div className="flex-grow-1">
+            <div className="admin-content flex-grow-1">
                 <Navbar />
                 <main className="p-4">{children}</main>
             </div>
