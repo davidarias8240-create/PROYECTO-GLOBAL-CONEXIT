@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { crearCliente } from "../services/api";
+import { crearSolicitudPublica } from "../services/api";
 
 const whatsappNumber = "573059157061";
 
@@ -21,10 +21,11 @@ function PlanCheckout({ plan, onClose }) {
 			email: String(formValues.email).trim(),
 			telefono: String(formValues.telefono).trim(),
 			direccion: String(formValues.direccion).trim(),
+			plan: plan.name,
 		};
 
 		try {
-			const result = await crearCliente(newCustomer);
+			const result = await crearSolicitudPublica(newCustomer);
 			if (!result.success) throw new Error(result.message || "No fue posible registrar tus datos.");
 			setCustomer(newCustomer);
 			setStep("payment");

@@ -1,14 +1,12 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/login";
-import Clientes from "./pages/clientes";
-import Productos from "./pages/productos";
-import Ventas from "./pages/ventas";
-import Facturas from "./pages/facturas";
-import Ordenes from "./pages/ordenes";
 import Home from "./pages/home";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ClientPortal from "./pages/interfazcliente";
+import EntityAdmin from "./pages/EntidadAdmin";
+import Desactivados from "./pages/Desactivados";
+import { adminEntities } from "./config/adminEntities";
 
 function App() {
     return (
@@ -18,38 +16,25 @@ function App() {
 
                 <Route path="/cliente" element={<ClientPortal />} />
 
-                <Route path="/clientes" element={
-                        <DashboardLayout>
-                            <Clientes />
-                        </DashboardLayout>
-                    }/>
-
                 <Route path="/admin" element={
                         <Login />
                     }/>
-
-                <Route path="/productos" element={
+                <Route path="/desactivados" element={
                         <DashboardLayout>
-                            <Productos />
+                            <Desactivados />
                         </DashboardLayout>
                     }/>
-
-                <Route path="/ventas" element={
-                        <DashboardLayout>
-                            <Ventas />
-                        </DashboardLayout>
-                    }/>
-                <Route path="/facturas" element={
-                        <DashboardLayout>
-                            <Facturas />
-                        </DashboardLayout>
-                    }/>
-
-                <Route path="/ordenes" element={
-                        <DashboardLayout>
-                            <Ordenes />
-                        </DashboardLayout>
-                    }/>
+                {adminEntities.map(({ key }) => (
+                    <Route
+                        key={key}
+                        path={`/${key}`}
+                        element={
+                            <DashboardLayout>
+                                <EntityAdmin entity={key} />
+                            </DashboardLayout>
+                        }
+                    />
+                ))}
             </Routes>
         </BrowserRouter>
     );

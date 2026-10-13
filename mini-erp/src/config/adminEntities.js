@@ -1,0 +1,18 @@
+export const adminEntities = [
+  { key: "roles", label: "Roles" },
+  { key: "usuarios", label: "Usuarios" },
+  { key: "clientes", label: "Clientes" },
+  { key: "direcciones", label: "Direcciones" },
+  { key: "planes", label: "Planes" },
+  { key: "contratos", label: "Contratos" },
+  { key: "periodos", label: "Períodos" },
+  { key: "facturas", label: "Facturas" },
+  { key: "pagos", label: "Pagos" },
+  { key: "ajustes", label: "Ajustes" },
+  { key: "tickets", label: "Tickets" },
+  { key: "interacciones", label: "Interacciones" },
+  { key: "ordenes", label: "Órdenes de servicio" },
+  { key: "notificaciones", label: "Notificaciones" },
+  { key: "solicitudes", label: "Solicitudes" },
+  { key: "auditoria", label: "Auditoría" },
+];
