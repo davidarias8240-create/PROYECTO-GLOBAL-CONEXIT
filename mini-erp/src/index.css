@@ -254,8 +254,11 @@ textarea {
 .sidebar { display: flex; flex: 0 0 250px; flex-direction: column; width: 250px; height: 100vh; min-height: 100vh; position: sticky; top: 0; padding: 26px 12px 18px; background: #f2eee5; color: #3d3428; border-right: 1px solid #e4ddcf; }
 .sidebar-logo-wrap { display: flex; justify-content: center; align-items: center; margin: 0 0 30px; padding: 8px 0 14px; }
 .sidebar-logo { width: 180px; height: auto; object-fit: contain; display: block; filter: drop-shadow(0 1px 2px rgba(76, 62, 43, 0.3)); }
-.sidebar .nav { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; overflow-y: auto; }
-.sidebar .nav-link { display: block; padding: 12px 14px; border-radius: 10px; color: #62584f; font-weight: 600; text-decoration: none; background: transparent; border: 1px solid transparent; transition: all 0.22s ease; }
+.sidebar-navigation { flex: 1 1 auto; min-height: 0; padding-right: 3px; overflow-y: auto; }
+.sidebar-group { margin-bottom: 18px; }
+.sidebar-group-title { margin: 0 0 5px; padding: 0 14px; color: #8b7b6a; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
+.sidebar-group .nav { display: flex; flex-direction: column; gap: 2px; }
+.sidebar .nav-link { display: block; padding: 9px 14px; border-radius: 8px; color: #62584f; font-weight: 600; text-decoration: none; background: transparent; border: 1px solid transparent; transition: all 0.22s ease; }
 
 .sidebar .nav-link:hover {
   background: #fff1e5;
@@ -280,7 +283,8 @@ textarea {
 
 @media (max-width: 768px) {
   .sidebar { width: 100%; height: auto; min-height: auto; position: static; }
-  .sidebar .nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 250px; }
+  .sidebar-navigation { max-height: 320px; }
+  .sidebar-group .nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .admin-entity-fields { grid-template-columns: 1fr; }
 }
 
