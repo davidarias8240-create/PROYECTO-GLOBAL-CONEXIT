@@ -1,164 +1,88 @@
 const BASE_URL = "http://localhost/PROYECTO-GLOBAL-CONEXIT/backend";
 
-export async function obtenerClientes() {
-  try {
-    const response = await fetch(`${BASE_URL}/clientes/listar.php`);
-
-    if (!response.ok) {
-      throw new Error("Error al obtener clientes");
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(error);
-    throw error;
+async function readResponse(response) {
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo completar la operación");
   }
-}
-export async function crearCliente(cliente) {
-  const response = await fetch(
-    `${BASE_URL}/clientes/crear.php`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(cliente),
-    }
-  );
-  return response.json();
+  return data;
 }
 
-export async function obtenerProductos() {
-  try {
-    const response = await fetch(`${BASE_URL}/productos/listar.php`);
-
-    if (!response.ok) {
-      throw new Error("Error al obtener productos");
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-}
-
-export async function obtenerVentas() {
-  try {
-    const response = await fetch(`${BASE_URL}/ventas/listar.php`);
-
-    if (!response.ok) {
-      throw new Error("Error al obtener ventas");
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-}
-
-export async function obtenerOrdenes() {
-  return obtenerVentas();
-}
-
-export async function obtenerFacturas() {
-  return obtenerVentas();
-}
-
-export async function crearProducto(producto) {
-  const response = await fetch(`${BASE_URL}/productos/crear.php`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(producto),
+async function request(path, { method = "GET", body, credentials = "include" } = {}) {
+  const response = await fetch(`${BASE_URL}/${path}`, {
+    method,
+    credentials,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
-  return response.json();
+  return readResponse(response);
 }
 
-export async function crearVenta(venta) {
-  const response = await fetch(`${BASE_URL}/ventas/crear.php`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(venta),
+export function iniciarSesionCliente(credenciales) {
+  return request("clientes/login.php", { method: "POST", body: credenciales });
+}
+
+export function obtenerPerfilCliente() {
+  return request("clientes/perfil.php");
+}
+
+export function cerrarSesionCliente() {
+  return request("clientes/logout.php", { method: "POST" });
+}
+
+export function iniciarSesionAdmin(credenciales) {
+  return request("admin/auth.php", { method: "POST", body: credenciales });
+}
+
+export function verificarSesionAdmin() {
+  return request("admin/auth.php");
+}
+
+async function solicitarEntidad(entity, file, options) {
+  return request(`${entity}/${file}${options?.query || ""}`, options);
+}
+
+export function obtenerMetadatosEntidad(entity) {
+  return solicitarEntidad(entity, "metadata.php");
+}
+
+export function obtenerRegistrosEntidad(entity, archivados = false) {
+  return solicitarEntidad(entity, "listar.php", {
+    query: archivados ? "?archivados=1" : "",
   });
-  return response.json();
 }
 
-export async function crearOrden(orden) {
-  return crearVenta(orden);
-}
-
-export async function crearFactura(factura) {
-  return crearVenta(factura);
-}
-
-export async function editarCliente(cliente) {
-  const response = await fetch(`${BASE_URL}/clientes/editar.php`,{
+export function guardarRegistroEntidad(entity, data, id = null) {
+  if (id === null) {
+    return solicitarEntidad(entity, "crear.php", {
       method: "POST",
-      headers: { "Content-Type": "application/json",},
-      body: JSON.stringify(cliente),
+      body: data,
     });
-
-  return response.json();
-}
-
-export async function editarProducto(producto) {
-  const response = await fetch(`${BASE_URL}/productos/editar.php`, {
+  }
+  return solicitarEntidad(entity, "editar.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(producto),
+    body: { id, ...data },
   });
-  return response.json();
 }
 
-export async function editarVenta(venta) {
-  const response = await fetch(`${BASE_URL}/ventas/editar.php`, {
+export function desactivarRegistroEntidad(entity, id) {
+  return solicitarEntidad(entity, "eliminar.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(venta),
+    body: { id },
   });
-  return response.json();
 }
 
-export async function editarOrden(orden) {
-  return editarVenta(orden);
-}
-
-export async function editarFactura(factura) {
-  return editarVenta(factura);
-}
-
-export async function eliminarCliente(id) {
-  const response = await fetch(`${BASE_URL}/clientes/eliminar.php`, {
+export function reactivarRegistroEntidad(entity, id) {
+  return solicitarEntidad(entity, "reactivar.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
+    body: { id },
   });
-  return response.json();
 }
 
-export async function eliminarProducto(id) {
-  const response = await fetch(`${BASE_URL}/productos/eliminar.php`, {
+export function crearSolicitudPublica(solicitud) {
+  return request("solicitudes/crear_publica.php", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
+    body: solicitud,
+    credentials: "omit",
   });
-  return response.json();
-}
-
-export async function eliminarVenta(id) {
-  const response = await fetch(`${BASE_URL}/ventas/eliminar.php`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  });
-  return response.json();
-}
-
-export async function eliminarOrden(id) {
-  return eliminarVenta(id);
-}
-
-export async function eliminarFactura(id) {
-  return eliminarVenta(id);
 }

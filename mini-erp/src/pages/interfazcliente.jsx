@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { cerrarSesionCliente, obtenerPerfilCliente } from "../services/api";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
+	{ id: "cuenta", icon: "◉", label: "Mi cuenta" },
 	{ id: "facturas", icon: "▤", label: "Mis Facturas", badge: true },
 	{ id: "pago", icon: "▣", label: "Pagar Factura" },
 	{ id: "paz", icon: "♢", label: "Paz y Salvo" },
@@ -13,14 +15,30 @@ function StatusPill({ children = "Servicio activo" }) {
 	return <span className="client-status"><i />{children}</span>;
 }
 
-function ClientSidebar({ currentView, setCurrentView }) {
+function ClientSidebar({ currentView, setCurrentView, perfil }) {
 	const navigate = useNavigate();
+	const initials = perfil.nombres
+		.split(/\s+/)
+		.filter(Boolean)
+		.slice(0, 2)
+		.map((name) => name[0])
+		.join("")
+		.toUpperCase();
+
+	const handleLogout = async () => {
+		try {
+			await cerrarSesionCliente();
+			navigate("/");
+		} catch (error) {
+			window.alert(error.message);
+		}
+	};
 
 	return (
 		<aside className="client-sidebar">
-			<div className="client-profile"><span className="profile-avatar">CA</span><div><strong>Carlos Andrés</strong><small>1.032.456.789</small></div><span className="profile-plan"><i />Plan Familiar 300 Mbps</span></div>
+			<div className="client-profile"><span className="profile-avatar">{initials}</span><div><strong>{perfil.nombres}</strong><small>{perfil.numero_documento}</small></div><span className="profile-plan"><i />{perfil.estado_cliente}</span></div>
 			<nav className="client-nav" aria-label="Navegación del portal">{menuItems.map((item) => <button className={currentView === item.id ? "active" : ""} key={item.id} onClick={() => setCurrentView(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.badge && <b />}</button>)}</nav>
-			<button className="client-logout" onClick={() => navigate("/")}><span>⇥</span>Cerrar sesión</button>
+			<button className="client-logout" onClick={handleLogout}><span>⇥</span>Cerrar sesión</button>
 		</aside>
 	);
 }
@@ -29,6 +47,17 @@ function ClientHeader({ title, subtitle }) { return <header className="client-he
 function Metric({ icon, label, value, unit, accent = "" }) { return <div className="metric-card"><span className={`metric-icon ${accent}`}>{icon}</span><small>{label}</small><strong className={accent}>{value}<em>{unit}</em></strong></div>; }
 function Usage({ label, value, width, upload }) { return <div className="usage-row"><div><span>{label}</span><strong>{value}</strong></div><div className="usage-track"><span className={upload ? "upload" : ""} style={{ width }} /></div></div>; }
 function Info({ label, value }) { return <div><small>{label}</small><strong>{value}</strong></div>; }
+function formatDate(value) {
+	if (!value) return "Sin registros";
+	return new Intl.DateTimeFormat("es-CO", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(value.replace(" ", "T")));
+}
+
+function ProfileView({ perfil }) {
+	return <><ClientHeader title="Mi cuenta" subtitle="Información personal y estado de tu cuenta" /><section className="dashboard-card equipment-card"><h3>Datos personales</h3><div className="equipment-grid"><Info label="Nombre completo" value={perfil.nombres} /><Info label="Tipo de documento" value={perfil.tipo_documento} /><Info label="Número de documento" value={perfil.numero_documento} /><Info label="Correo electrónico" value={perfil.correo || "No registrado"} /><Info label="Teléfono" value={perfil.telefono || "No registrado"} /><Info label="Dirección" value={perfil.direcciones || "No registrada"} /><Info label="Número de cliente" value={perfil.numero_cliente} /><Info label="Rol" value={perfil.rol} /><Info label="Estado del cliente" value={perfil.estado_cliente} /><Info label="Estado de la cuenta" value={perfil.estado_usuario} /><Info label="Miembro desde" value={formatDate(perfil.fecha_creacion)} /><Info label="Último acceso" value={formatDate(perfil.ultimo_acceso)} /></div></section></>;
+}
 function ServiceStatus() { return <section className="dashboard-card service-card"><h3>Estado del servicio</h3>{["Conectividad a internet", "Resolución DNS", "Router / CPE", "Red de fibra óptica"].map((item, index) => <div className="service-row" key={item}><span>{item}</span><strong><i />{index === 2 ? "Conectado" : index === 3 ? "Operativa" : "Normal"}</strong></div>)}<p className="helper-text">◷ Última actualización: hoy, 02 Sep 2026 — 10:38 a.m.</p></section>; }
 
 function PlanView() {
@@ -39,10 +68,41 @@ function InvoicesView({ setCurrentView }) { return <><ClientHeader title="Mis Fa
 
 function PaymentView() { return <><ClientHeader title="Pagar Factura" subtitle="Realiza el pago de tu factura pendiente" /><section className="payment-layout"><div className="payment-due"><div><small>Factura a pagar</small><strong>Septiembre 2026</strong><span>FC-2026-009 · Vence 5 Oct 2026</span></div><b>$ 49.990<small>COP · IVA incluido</small></b></div><div className="dashboard-card payment-card"><h3>Método de pago</h3><div className="payment-methods"><button className="selected">▣ <strong>Tarjeta</strong><small>Débito o crédito</small></button><button>▥ <strong>PSE</strong><small>Débito bancario</small></button></div><label>NÚMERO DE TARJETA<input placeholder="1234  5678  9012  3456" /></label><div className="input-row"><label>VENCIMIENTO<input placeholder="MM/AA" /></label><label>CVV<input placeholder="•••" /></label></div><label>NOMBRE EN LA TARJETA<input placeholder="Como aparece en la tarjeta" /></label><button className="submit-button">Pagar $ 49.990</button><p className="helper-text center">🔒 Pago cifrado con SSL 256-bit · Procesado por Redeban</p></div></section></>; }
 
-function SupportView() { return <><ClientHeader title="Soporte / Fallas" subtitle="Reporta problemas y sigue tus tickets" /><div className="support-grid"><section className="dashboard-card support-form"><h2>Reportar nueva falla</h2><p>Describe el problema y un técnico se comunicará contigo a la brevedad.</p><label>TIPO DE FALLA *<select defaultValue=""><option value="" disabled>Selecciona el tipo de falla...</option><option>Intermitencia de conexión</option><option>Velocidad reducida</option></select></label><label>PRIORIDAD<div className="priority"><button>Baja</button><button className="selected">Media</button><button>Alta</button></div></label><label>DESCRIPCIÓN DEL PROBLEMA *<textarea placeholder="Describe detalladamente el problema: ¿desde cuándo ocurre?, ¿a qué horas?, ¿afecta a todos los dispositivos?..." /></label><label>TELÉFONO DE CONTACTO<input value="310 456 7890" readOnly /></label><button className="submit-button">Crear ticket de soporte</button></section><section className="dashboard-card tickets"><h2>Mis tickets</h2>{["Velocidad por debajo del plan", "Intermitencia de conexión"].map((ticket, index) => <article key={ticket}><small>TK-2026-0{index ? "28" : "41"}</small><strong>{ticket}</strong><p>{index ? "La conexión cae varias veces al día especialmente entre las 7-9 pm." : "Velocidad medida por debajo de los 200 Mbps prometidos en horas pico."}</p><span>Resuelto</span><time>{index ? "3 Jun 2026" : "14 Ago 2026"}</time></article>)}</section></div></>; }
+function SupportView({ perfil }) { return <><ClientHeader title="Soporte / Fallas" subtitle="Reporta problemas y sigue tus tickets" /><div className="support-grid"><section className="dashboard-card support-form"><h2>Reportar nueva falla</h2><p>Describe el problema y un técnico se comunicará contigo a la brevedad.</p><label>TIPO DE FALLA *<select defaultValue=""><option value="" disabled>Selecciona el tipo de falla...</option><option>Intermitencia de conexión</option><option>Velocidad reducida</option></select></label><label>PRIORIDAD<div className="priority"><button>Baja</button><button className="selected">Media</button><button>Alta</button></div></label><label>DESCRIPCIÓN DEL PROBLEMA *<textarea placeholder="Describe detalladamente el problema: ¿desde cuándo ocurre?, ¿a qué horas?, ¿afecta a todos los dispositivos?..." /></label><label>TELÉFONO DE CONTACTO<input value={perfil.telefono || "No registrado"} readOnly /></label><button className="submit-button">Crear ticket de soporte</button></section><section className="dashboard-card tickets"><h2>Mis tickets</h2>{["Velocidad por debajo del plan", "Intermitencia de conexión"].map((ticket, index) => <article key={ticket}><small>TK-2026-0{index ? "28" : "41"}</small><strong>{ticket}</strong><p>{index ? "La conexión cae varias veces al día especialmente entre las 7-9 pm." : "Velocidad medida por debajo de los 200 Mbps prometidos en horas pico."}</p><span>Resuelto</span><time>{index ? "3 Jun 2026" : "14 Ago 2026"}</time></article>)}</section></div></>; }
 
-function CertificateView() { return <><ClientHeader title="Paz y Salvo" subtitle="Certificado de no adeudo con Global Conexit" /><section className="certificate dashboard-card"><div className="certificate-title"><h2>CERTIFICADO DE PAZ Y SALVO</h2><p>Global Conexit S.A.S. · NIT 900.123.456-7</p></div><p>Por medio del presente documento, <strong>Global Conexit S.A.S.</strong>, identificada con NIT 900.123.456-7, certifica que el(la) señor(a):</p><div className="certificate-data"><Info label="Nombre completo" value="Carlos Andrés Rodríguez" /><Info label="Documento de identidad" value="CC 1.032.456.789" /><Info label="Contrato" value="#GC-2022-004891" /><Info label="Servicio" value="Plan Familiar — 300 Mbps" /><Info label="Dirección del servicio" value="Cra. 45 #92-18, Bogotá D.C." /></div><p>Se encuentra <strong className="green">a PAZ Y SALVO</strong> con todas sus obligaciones económicas con esta empresa a la fecha de expedición de este documento.</p><div className="certificate-dates"><Info label="Fecha de expedición" value="02 de Septiembre de 2026" /><Info label="Válido hasta" value="02 de Octubre de 2026" /></div><small className="helper-text">Este certificado es de carácter informativo y tiene validez de 30 días calendario a partir de su expedición.</small><div className="certificate-actions"><button className="submit-button">⇩ Descargar PDF</button><button className="secondary-button">▣ Imprimir</button></div></section></>; }
+function CertificateView({ perfil }) { return <><ClientHeader title="Paz y Salvo" subtitle="Certificado de no adeudo con Global Conexit" /><section className="certificate dashboard-card"><div className="certificate-title"><h2>CERTIFICADO DE PAZ Y SALVO</h2><p>Global Conexit S.A.S. · NIT 900.123.456-7</p></div><p>Por medio del presente documento, <strong>Global Conexit S.A.S.</strong>, identificada con NIT 900.123.456-7, certifica que el(la) señor(a):</p><div className="certificate-data"><Info label="Nombre completo" value={perfil.nombres} /><Info label="Documento de identidad" value={`${perfil.tipo_documento} ${perfil.numero_documento}`} /><Info label="Contrato" value="#GC-2022-004891" /><Info label="Servicio" value="Plan Familiar — 300 Mbps" /><Info label="Dirección del servicio" value={perfil.direcciones || "No registrada"} /></div><p>Se encuentra <strong className="green">a PAZ Y SALVO</strong> con todas sus obligaciones económicas con esta empresa a la fecha de expedición de este documento.</p><div className="certificate-dates"><Info label="Fecha de expedición" value="02 de Septiembre de 2026" /><Info label="Válido hasta" value="02 de Octubre de 2026" /></div><small className="helper-text">Este certificado es de carácter informativo y tiene validez de 30 días calendario a partir de su expedición.</small><div className="certificate-actions"><button className="submit-button">⇩ Descargar PDF</button><button className="secondary-button">▣ Imprimir</button></div></section></>; }
 
-function ClientPortal() { const [currentView, setCurrentView] = useState("plan"); const content = { plan: <PlanView />, facturas: <InvoicesView setCurrentView={setCurrentView} />, pago: <PaymentView />, paz: <CertificateView />, soporte: <SupportView /> }; return <div className="client-portal"><ClientSidebar currentView={currentView} setCurrentView={setCurrentView} /><main className="client-main">{content[currentView]}</main></div>; }
+function ClientPortal() {
+	const [currentView, setCurrentView] = useState("cuenta");
+	const [perfil, setPerfil] = useState(null);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState("");
+
+	useEffect(() => {
+		obtenerPerfilCliente()
+			.then(setPerfil)
+			.catch((profileError) => setError(profileError.message))
+			.finally(() => setLoading(false));
+	}, []);
+
+	if (loading) {
+		return <main className="client-main"><p role="status">Cargando información de tu cuenta...</p></main>;
+	}
+
+	if (error) {
+		return <main className="client-main"><section className="dashboard-card"><h1>No se pudo abrir el portal</h1><p role="alert">{error}</p><button className="submit-button" onClick={() => window.location.assign("/")}>Volver al inicio</button></section></main>;
+	}
+
+	const content = {
+		plan: <PlanView />,
+		cuenta: <ProfileView perfil={perfil} />,
+		facturas: <InvoicesView setCurrentView={setCurrentView} />,
+		pago: <PaymentView />,
+		paz: <CertificateView perfil={perfil} />,
+		soporte: <SupportView perfil={perfil} />,
+	};
+
+	return <div className="client-portal"><ClientSidebar currentView={currentView} setCurrentView={setCurrentView} perfil={perfil} /><main className="client-main">{content[currentView]}</main></div>;
+}
 
 export default ClientPortal;

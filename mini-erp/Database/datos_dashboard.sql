@@ -1,4 +1,6 @@
-
+-- ============================================================
+-- BASE DE DATOS: GLOBAL CONEXIT
+-- ============================================================
 
 CREATE DATABASE IF NOT EXISTS global_conexit
     CHARACTER SET utf8mb4
@@ -7,7 +9,9 @@ CREATE DATABASE IF NOT EXISTS global_conexit
 USE global_conexit;
 
 
-
+-- ============================================================
+-- 1. TABLA: ROL
+-- ============================================================
 
 CREATE TABLE rol (
     id_rol INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -17,6 +21,9 @@ CREATE TABLE rol (
 ) ENGINE=InnoDB;
 
 
+-- ============================================================
+-- 2. TABLA: USUARIO
+-- ============================================================
 
 CREATE TABLE usuario (
     id_usuario INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -35,6 +42,9 @@ CREATE TABLE usuario (
 ) ENGINE=InnoDB;
 
 
+-- ============================================================
+-- 3. TABLA: CLIENTE
+-- ============================================================
 
 CREATE TABLE cliente (
     id_cliente INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -66,7 +76,9 @@ CREATE TABLE cliente (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 4. TABLA: DIRECCION
+-- ============================================================
 
 CREATE TABLE direccion (
     id_direccion INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -88,7 +100,9 @@ CREATE TABLE direccion (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 5. TABLA: PLAN
+-- ============================================================
 
 CREATE TABLE plan (
     id_plan INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -114,7 +128,9 @@ CREATE TABLE plan (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 6. TABLA: CONTRATO
+-- ============================================================
 
 CREATE TABLE contrato (
     id_contrato INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -157,7 +173,9 @@ CREATE TABLE contrato (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 7. TABLA: PERIODO FACTURACION
+-- ============================================================
 
 CREATE TABLE periodo_facturacion (
     id_periodo INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -177,6 +195,9 @@ CREATE TABLE periodo_facturacion (
 ) ENGINE=InnoDB;
 
 
+-- ============================================================
+-- 8. TABLA: FACTURA
+-- ============================================================
 
 CREATE TABLE factura (
     id_factura INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -223,7 +244,9 @@ CREATE TABLE factura (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 9. TABLA: PAGO
+-- ============================================================
 
 CREATE TABLE pago (
     id_pago INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -257,7 +280,9 @@ CREATE TABLE pago (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 10. TABLA: AJUSTE FACTURA
+-- ============================================================
 
 CREATE TABLE ajuste_factura (
     id_ajuste INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -291,7 +316,9 @@ CREATE TABLE ajuste_factura (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 11. TABLA: TICKET
+-- ============================================================
 
 CREATE TABLE ticket (
     id_ticket INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -334,7 +361,9 @@ CREATE TABLE ticket (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 12. TABLA: INTERACCION
+-- ============================================================
 
 CREATE TABLE interaccion (
     id_interaccion INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -367,7 +396,9 @@ CREATE TABLE interaccion (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 13. TABLA: ORDEN SERVICIO
+-- ============================================================
 
 CREATE TABLE orden_servicio (
     id_orden INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -429,7 +460,9 @@ CREATE TABLE orden_servicio (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 14. TABLA: NOTIFICACION
+-- ============================================================
 
 CREATE TABLE notificacion (
     id_notificacion INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -466,7 +499,9 @@ CREATE TABLE notificacion (
 ) ENGINE=InnoDB;
 
 
-
+-- ============================================================
+-- 15. TABLA: SOLICITUD SERVICIO
+-- ============================================================
 
 CREATE TABLE solicitud_servicio (
     id_solicitud INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -498,6 +533,9 @@ CREATE TABLE solicitud_servicio (
 ) ENGINE=InnoDB;
 
 
+-- ============================================================
+-- 16. TABLA: AUDITORIA
+-- ============================================================
 
 CREATE TABLE auditoria (
     id_auditoria BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -517,7 +555,31 @@ CREATE TABLE auditoria (
 ) ENGINE=InnoDB;
 
 
+-- ============================================================
+-- 17. TABLA: REGISTROS DESACTIVADOS DEL PANEL ADMINISTRATIVO
+-- ============================================================
 
+CREATE TABLE admin_bajas (
+    entidad VARCHAR(40) NOT NULL,
+    id_registro VARCHAR(30) NOT NULL,
+    estado_anterior VARCHAR(30) NOT NULL DEFAULT '',
+    fecha_baja DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id_usuario_admin INT UNSIGNED NOT NULL,
+
+    PRIMARY KEY (entidad, id_registro),
+    INDEX idx_admin_bajas_usuario (id_usuario_admin),
+
+    CONSTRAINT fk_admin_bajas_usuario
+        FOREIGN KEY (id_usuario_admin)
+        REFERENCES usuario(id_usuario)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+
+-- ============================================================
+-- INDICES
+-- ============================================================
 
 CREATE INDEX idx_cliente_nombre
     ON cliente(nombres);
@@ -562,7 +624,9 @@ CREATE INDEX idx_auditoria_entidad
     ON auditoria(entidad, id_entidad);
 
 
-
+-- ============================================================
+-- ROLES INICIALES
+-- ============================================================
 
 INSERT INTO rol (
     nombre,
@@ -590,7 +654,9 @@ INSERT INTO rol (
 );
 
 
-
+-- ============================================================
+-- VISTA: FACTURAS DE CLIENTES
+-- ============================================================
 
 CREATE VIEW vw_facturas_clientes AS
 SELECT
@@ -615,7 +681,9 @@ INNER JOIN plan p
     ON co.id_plan = p.id_plan;
 
 
-
+-- ============================================================
+-- VISTA: CONTRATOS ACTIVOS
+-- ============================================================
 
 CREATE VIEW vw_contratos_activos AS
 SELECT
@@ -640,6 +708,8 @@ INNER JOIN direccion d
 WHERE co.estado = 'ACTIVO';
 
 
-
+-- ============================================================
+-- COMPROBACION FINAL
+-- ============================================================
 
 SHOW TABLES;

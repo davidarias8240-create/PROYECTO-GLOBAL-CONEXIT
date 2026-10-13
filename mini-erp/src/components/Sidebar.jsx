@@ -1,8 +1,19 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { cerrarSesionCliente } from "../services/api";
+import { adminEntities } from "../config/adminEntities";
 
 function Sidebar() {
     const navigate = useNavigate();
+
+    const handleLogout = async () => {
+        try {
+            await cerrarSesionCliente();
+            navigate("/admin", { replace: true });
+        } catch (error) {
+            window.alert(error.message);
+        }
+    };
 
     return (
         <aside className="sidebar">
@@ -11,25 +22,16 @@ function Sidebar() {
             </div>
 
             <ul className="nav nav-pills flex-column gap-2">
+                {adminEntities.map(({ key, label }) => (
+                    <li className="nav-item" key={key}>
+                        <NavLink className="nav-link" to={`/${key}`}>{label}</NavLink>
+                    </li>
+                ))}
                 <li className="nav-item">
-                    <NavLink className="nav-link" to="/clientes">Clientes</NavLink>
-                </li>
-
-                <li className="nav-item">
-                    <NavLink className="nav-link" to="/productos">Productos</NavLink>
-                </li>
-
-                <li className="nav-item">
-                    <NavLink className="nav-link" to="/ventas">Ventas</NavLink>
-                </li>
-                <li className="nav-item">
-                    <NavLink className="nav-link" to="/facturas">Facturas</NavLink>
-                </li>
-                <li className="nav-item">
-                    <NavLink className="nav-link" to="/ordenes">Ordenes</NavLink>
+                    <NavLink className="nav-link" to="/desactivados">Desactivados</NavLink>
                 </li>
             </ul>
-            <button type="button" className="admin-logout" onClick={() => navigate("/")}>
+            <button type="button" className="admin-logout" onClick={handleLogout}>
                 <span aria-hidden="true">⇥</span>Cerrar sesión
             </button>
         </aside>

@@ -1,24 +1,41 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
+import { iniciarSesionCliente } from "../services/api";
 
 function Formcliente({ onClose }) {
     const navigate = useNavigate();
     const [error, setError] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
         const documentNumber = String(formData.get("documentNumber") || "").trim();
-        const password = String(formData.get("password") || "").trim();
+        const password = String(formData.get("password") || "");
+        const documentType = String(formData.get("documentType") || "");
 
-        if (!documentNumber || !password) {
+        if (!documentNumber || !password || !documentType) {
             setError("Ingresa tu número de documento y contraseña.");
             return;
         }
 
-        navigate("/cliente");
+        setError("");
+        setIsSubmitting(true);
+
+        try {
+            await iniciarSesionCliente({
+                tipo_documento: documentType,
+                numero_documento: documentNumber,
+                contrasena: password,
+            });
+            navigate("/cliente");
+        } catch (loginError) {
+            setError(loginError.message);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     return (
@@ -30,8 +47,13 @@ function Formcliente({ onClose }) {
                 <p>Ingresa a tu Portal de Cliente Global Conexit</p>
                 <form onSubmit={handleSubmit}>
                     <label htmlFor="client-document-type">TIPO DE DOCUMENTO</label>
-                    <select id="client-document-type" name="documentType" defaultValue="cc">
-                        <option value="cc">Cédula de Ciudadanía (CC)</option>
+                    <select id="client-document-type" name="documentType" defaultValue="CC">
+                        <option value="CC">Cédula de Ciudadanía (CC)</option>
+                        <option value="CE">Cédula de Extranjería (CE)</option>
+                        <option value="NIT">NIT</option>
+                        <option value="TI">Tarjeta de Identidad (TI)</option>
+                        <option value="PASAPORTE">Pasaporte</option>
+                        <option value="OTRO">Otro</option>
                     </select>
                     <label htmlFor="client-document-number">NÚMERO DE DOCUMENTO</label>
                     <input id="client-document-number" name="documentNumber" placeholder="1.234.567.890" autoComplete="username" />
@@ -42,7 +64,9 @@ function Formcliente({ onClose }) {
                     </div>
                     {error && <p className="client-login-error" role="alert">{error}</p>}
                     <button className="client-login-forgot" type="button">¿Olvidaste tu contraseña?</button>
-                    <button className="client-login-submit" type="submit">Ingresar al Portal</button>
+                    <button className="client-login-submit" type="submit" disabled={isSubmitting}>
+                        {isSubmitting ? "Validando..." : "Ingresar al Portal"}
+                    </button>
                 </form>
                 <p className="client-login-register">¿No tienes una cuenta? <button type="button">Crear cuenta nueva</button></p>
             </section>
