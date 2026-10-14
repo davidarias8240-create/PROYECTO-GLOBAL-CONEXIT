@@ -3,30 +3,30 @@ import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 import Formcliente from "../components/Formcliente";
 import PlanCheckout from "../components/PlanCheckout";
+import { obtenerPlanesPublicos } from "../services/api";
 
-const plans = [
-	{
-		name: "Plan Básico",
-		down: "100 Mbps",
-		up: "100 Mbps",
-		price: "$55.900",
-		features: ["Router WiFi 5-8 dispositivos conectados", "Soporte técnico 24/7", "Sin permanencia mínima", "Instalación gratis", "Fibra  Óptica"],
-	},
-	{
-		name: "Plan Familiar",
-		down: "200 Mbps",
-		up: "200 Mbps",
-		price: "$79.900",
-		featured: true,
-		features: ["Router WiFi 10-15 dispositivos conectados", "Soporte técnico 24/7", "Sin permanencia mínima", "Instalación gratis", "Fibra  Óptica"],
-	},
-	{
-		name: "Plan Gamer - Empresarial",
-		down: "500 Mbps",
-		up: "500 Mbps",
-		price: "$129.900",
-		features: ["Router WiFi 20-30 dispositivos conectados", "Soporte prioritario 24/7", "Sin permanencia mínima", "Instalación gratis", "Fibra  Óptica"],
-	},
+const fixedPlanFeatures = [
+	[
+		"Router WiFi 5-8 dispositivos conectados",
+		"Soporte técnico 24/7",
+		"Sin permanencia mínima",
+		"Instalación gratis",
+		"Fibra Óptica",
+	],
+	[
+		"Router WiFi 10-15 dispositivos conectados",
+		"Soporte técnico 24/7",
+		"Sin permanencia mínima",
+		"Instalación gratis",
+		"Fibra Óptica",
+	],
+	[
+		"Router WiFi 20-30 dispositivos conectados",
+		"Soporte prioritario 24/7",
+		"Sin permanencia mínima",
+		"Instalación gratis",
+		"Fibra Óptica",
+	],
 ];
 
 const portalItems = [
@@ -40,7 +40,47 @@ function Home() {
 	const speedTestRef = useRef(null);
 	const [showClientLogin, setShowClientLogin] = useState(false);
 	const [selectedPlan, setSelectedPlan] = useState(null);
+	const [plansState, setPlansState] = useState({ status: "loading", items: [], error: "" });
+	const [plansReload, setPlansReload] = useState(0);
 	const [speedTest, setSpeedTest] = useState({ status: "ready", progress: 0, download: 0, upload: 0, latency: 0, error: "" });
+
+	useEffect(() => {
+		let isCurrent = true;
+
+		obtenerPlanesPublicos()
+			.then((response) => {
+				if (!Array.isArray(response.planes)) {
+					throw new Error("La respuesta de planes no tiene el formato esperado.");
+				}
+
+				const items = response.planes.map((plan, index) => ({
+					id: plan.id_plan,
+					name: plan.nombre,
+					down: plan.velocidad,
+					up: plan.velocidad,
+					price: `$${new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 }).format(Number(plan.precio))}`,
+					features: fixedPlanFeatures[index] || fixedPlanFeatures[fixedPlanFeatures.length - 1],
+					featured: index === 1,
+				}));
+
+				if (isCurrent) {
+					setPlansState({ status: items.length ? "ready" : "empty", items, error: "" });
+				}
+			})
+			.catch((error) => {
+				if (isCurrent) {
+					setPlansState({
+						status: "error",
+						items: [],
+						error: error.message || "No se pudieron cargar los planes.",
+					});
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, [plansReload]);
 
 	useEffect(() => {
 		const test = new SpeedTest({
@@ -149,11 +189,13 @@ function Home() {
 				.featured .price { color:var(--gold); }
 				.plan ul { border-top:1px solid #eee6dc; padding:18px 0 0; margin:0 0 22px; list-style:none; flex:1; }
 				.plan li { font-size:14px; margin:12px 0; color:#4e4945; }
-				.featured li { color:#e7e1d8; border-color:#3c3c39; }
+				.featured li { color:#e7e1d8; }
 				.plan li:before { content:"✓"; display:inline-grid; place-items:center; width:18px; height:18px; margin-right:9px; border-radius:50%; background:#fff0e4; color:var(--orange); font-size:11px; }
 				.featured li:before { background:#574914; color:var(--gold); }
 				.plan .primary-button { width:100%; border-radius:11px; }
 				.featured .primary-button { background:linear-gradient(90deg, var(--gold), var(--orange)); color:var(--ink); }
+				.plans-message { grid-column:1 / -1; margin:0; text-align:center; color:var(--muted); }
+				.plans-retry { display:block; margin:14px auto 0; }
 				.diagnostic { background:#fff; }
 				.diagnostic-grid { max-width:975px; margin:auto; display:grid; grid-template-columns:1fr 1.25fr; gap:80px; align-items:center; }
 				.meter { background:#fcfaf4; border:1px solid #e5ded0; border-radius:22px; padding:28px 30px 24px; text-align:center; box-shadow:0 12px 20px #21160a12; }
@@ -217,7 +259,12 @@ function Home() {
 				</div><div className="hero-visual"><img src="/subfondo.jpeg" alt="Router de fibra óptica conectado a una red de alta velocidad" /></div></div></div></section>
 
 				<section className="section" id="planes"><div className="section-heading"><span className="eyebrow">Planes de Internet</span><h2 className="section-title">Elige tu velocidad</h2><p className="section-subtitle">Fibra óptica simétrica, sin costos ocultos y sin letra pequeña.</p></div>
-					<div className="plans">{plans.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.name}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><button className="primary-button" type="button" onClick={() => setSelectedPlan(plan)}>Contratar ahora →</button></article>)}</div>
+					<div className="plans">
+						{plansState.status === "loading" && <p className="plans-message" role="status">Cargando planes...</p>}
+						{plansState.status === "empty" && <p className="plans-message">En este momento no hay planes disponibles.</p>}
+						{plansState.status === "error" && <div className="plans-message" role="alert"><p>{plansState.error}</p><button className="primary-button plans-retry" type="button" onClick={() => { setPlansState({ status: "loading", items: [], error: "" }); setPlansReload((attempt) => attempt + 1); }}>Reintentar</button></div>}
+						{plansState.items.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.id}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><button className="primary-button" type="button" onClick={() => setSelectedPlan(plan)}>Contratar ahora →</button></article>)}
+					</div>
 				</section>
 
 				<section className="section diagnostic"><div className="diagnostic-grid"><div><div className="meter"><span className="meter-label">VELOCIDAD DE DESCARGA</span><div className="gauge" style={{ "--gauge-progress": Math.min(gaugeValue / 700, 1) }}><svg viewBox="0 0 250 142" aria-hidden="true"><path className="gauge-track" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /><path className="gauge-progress" pathLength="1" d="M 20 120 A 105 105 0 0 1 230 120" /></svg><span className="gauge-needle" style={{ transform: `rotate(${gaugeAngle}deg)` }} /><span className="gauge-center" /><span className="gauge-value">{gaugeValue || 0}<br /><small>MBPS</small></span></div><div className="meter-stats"><div>↓ Descarga<strong>{speedTest.download || "—"} Mbps</strong></div><div>↑ Subida<strong>{speedTest.upload || "—"} Mbps</strong></div><div>Latencia<strong>{speedTest.latency || "—"} ms</strong></div></div><p className={`speed-status${speedTest.status === "error" ? " error" : ""}`}>{speedTest.error || (isTesting ? `Analizando tu conexión... ${speedTest.progress}%` : speedTest.status === "finished" ? "Medición completada con Cloudflare" : "Presiona el botón para comenzar")}</p></div><button className="primary-button" style={{ display:"flex", margin:"24px auto 0" }} onClick={startSpeedTest} disabled={isTesting}>{isTesting ? "Midiendo conexión..." : speedTest.status === "finished" ? "↻ Repetir test" : "⚡ Test de velocidad"}</button></div><div className="diagnostic-copy"><span className="eyebrow">Diagnóstico en tiempo real</span><h2 className="section-title">¿Qué tan rápida<br /><span className="accent">es tu red</span> hoy?</h2><p className="section-subtitle">Con nuestra herramienta integrada mide tu velocidad de descarga, subida y latencia desde el portal, sin instalar nada.</p><div className="benefit"><span className="benefit-icon">🎮</span><div><strong>Gaming sin lag</strong><span>Latencia menor a 5 ms para una experiencia impecable.</span></div></div><div className="benefit"><span className="benefit-icon">📺</span><div><strong>Streaming en 4K</strong><span>Velocidad para múltiples streams en alta definición.</span></div></div><div className="benefit"><span className="benefit-icon">🏠</span><div><strong>Todos tus dispositivos</strong><span>Wi-Fi 6 para hasta 50 dispositivos sin perder rendimiento.</span></div></div></div></div></section>

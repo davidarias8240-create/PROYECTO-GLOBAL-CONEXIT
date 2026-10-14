@@ -4,7 +4,6 @@ import { cerrarSesionCliente, obtenerPerfilCliente } from "../services/api";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
-	{ id: "cuenta", icon: "◉", label: "Mi cuenta" },
 	{ id: "facturas", icon: "▤", label: "Mis Facturas", badge: true },
 	{ id: "pago", icon: "▣", label: "Pagar Factura" },
 	{ id: "paz", icon: "♢", label: "Paz y Salvo" },
@@ -36,7 +35,20 @@ function ClientSidebar({ currentView, setCurrentView, perfil }) {
 
 	return (
 		<aside className="client-sidebar">
-			<div className="client-profile"><span className="profile-avatar">{initials}</span><div><strong>{perfil.nombres}</strong><small>{perfil.numero_documento}</small></div><span className="profile-plan"><i />{perfil.estado_cliente}</span></div>
+			<div className="client-profile">
+				<span className="profile-avatar">{initials}</span>
+				<div><strong>{perfil.nombres}</strong><small>{perfil.numero_documento}</small></div>
+				<span className="profile-plan"><i />{perfil.estado_cliente}</span>
+				<button
+					className={`profile-account-action${currentView === "cuenta" ? " active" : ""}`}
+					type="button"
+					aria-current={currentView === "cuenta" ? "page" : undefined}
+					onClick={() => setCurrentView("cuenta")}
+				>
+					<span className="nav-icon" aria-hidden="true">◉</span>
+					<span>Mi cuenta</span>
+				</button>
+			</div>
 			<nav className="client-nav" aria-label="Navegación del portal">{menuItems.map((item) => <button className={currentView === item.id ? "active" : ""} key={item.id} onClick={() => setCurrentView(item.id)}><span className="nav-icon">{item.icon}</span>{item.label}{item.badge && <b />}</button>)}</nav>
 			<button className="client-logout" onClick={handleLogout}><span>⇥</span>Cerrar sesión</button>
 		</aside>
@@ -73,7 +85,7 @@ function SupportView({ perfil }) { return <><ClientHeader title="Soporte / Falla
 function CertificateView({ perfil }) { return <><ClientHeader title="Paz y Salvo" subtitle="Certificado de no adeudo con Global Conexit" /><section className="certificate dashboard-card"><div className="certificate-title"><h2>CERTIFICADO DE PAZ Y SALVO</h2><p>Global Conexit S.A.S. · NIT 900.123.456-7</p></div><p>Por medio del presente documento, <strong>Global Conexit S.A.S.</strong>, identificada con NIT 900.123.456-7, certifica que el(la) señor(a):</p><div className="certificate-data"><Info label="Nombre completo" value={perfil.nombres} /><Info label="Documento de identidad" value={`${perfil.tipo_documento} ${perfil.numero_documento}`} /><Info label="Contrato" value="#GC-2022-004891" /><Info label="Servicio" value="Plan Familiar — 300 Mbps" /><Info label="Dirección del servicio" value={perfil.direcciones || "No registrada"} /></div><p>Se encuentra <strong className="green">a PAZ Y SALVO</strong> con todas sus obligaciones económicas con esta empresa a la fecha de expedición de este documento.</p><div className="certificate-dates"><Info label="Fecha de expedición" value="02 de Septiembre de 2026" /><Info label="Válido hasta" value="02 de Octubre de 2026" /></div><small className="helper-text">Este certificado es de carácter informativo y tiene validez de 30 días calendario a partir de su expedición.</small><div className="certificate-actions"><button className="submit-button">⇩ Descargar PDF</button><button className="secondary-button">▣ Imprimir</button></div></section></>; }
 
 function ClientPortal() {
-	const [currentView, setCurrentView] = useState("cuenta");
+	const [currentView, setCurrentView] = useState("plan");
 	const [perfil, setPerfil] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");

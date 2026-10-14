@@ -259,6 +259,17 @@ textarea {
 .sidebar-group-title { margin: 0 0 5px; padding: 0 14px; color: #8b7b6a; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }
 .sidebar-group .nav { display: flex; flex-direction: column; gap: 2px; }
 .sidebar .nav-link { display: block; padding: 9px 14px; border-radius: 8px; color: #62584f; font-weight: 600; text-decoration: none; background: transparent; border: 1px solid transparent; transition: all 0.22s ease; }
+.sidebar-group-toggle { display: flex; align-items: center; gap: 11px; width: 100%; padding: 10px 12px; border: 1px solid transparent; border-radius: 8px; color: #514940; background: transparent; font: inherit; font-size: 0.9rem; font-weight: 700; text-align: left; cursor: pointer; transition: background 0.2s ease, color 0.2s ease; }
+.sidebar-group-toggle:hover, .sidebar-group-toggle[aria-expanded="true"] { color: #d95d08; background: #fff1e5; }
+.sidebar-group-toggle:focus-visible { outline: 2px solid #e9650a; outline-offset: 2px; }
+.sidebar-category-icon { width: 19px; height: 19px; flex: 0 0 19px; }
+.sidebar-chevron { width: 16px; height: 16px; flex: 0 0 16px; margin-left: auto; transition: transform 0.2s ease; }
+.sidebar-chevron.expanded { transform: rotate(90deg); }
+.sidebar-subcategories { margin-top: 3px; padding-left: 7px; }
+.sidebar .sidebar-subcategories[hidden] { display: none; }
+.sidebar .sidebar-subcategories .nav-link { display: flex; align-items: center; gap: 11px; padding: 8px 12px; font-size: 0.86rem; }
+.sidebar-subcategory-icon { width: 17px; height: 17px; flex: 0 0 17px; color: #8b7b6a; }
+.sidebar .nav-link.active .sidebar-subcategory-icon { color: #e9650a; }
 
 .sidebar .nav-link:hover {
   background: #fff1e5;
@@ -688,6 +699,11 @@ main > * {
 .client-profile strong { display: block; font-size: 14px; }
 .client-profile small { display: block; color: var(--client-muted); font-size: 12px; }
 .profile-plan { grid-column: 1 / -1; margin-top: 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.profile-account-action { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; min-height: 30px; margin-top: 4px; padding: 0 8px; border: 1px solid transparent; border-radius: 8px; color: #69625c; background: transparent; font: inherit; font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease; }
+.profile-account-action .nav-icon { width: 15px; font-size: 15px; }
+.profile-account-action:hover, .profile-account-action.active { color: var(--client-orange); background: #fff0e5; }
+.profile-account-action.active { border-color: #ffe1c9; }
+.profile-account-action:focus-visible { outline: 2px solid var(--client-orange); outline-offset: 2px; }
 .profile-plan i, .client-status i, .service-row i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #19c568; box-shadow: 0 0 0 3px rgba(25, 197, 104, .1); }
 .client-nav { display: flex; flex-direction: column; gap: 4px; padding: 0 11px; }
 .client-nav button, .client-logout { border: 0; background: transparent; color: #69625c; text-align: left; cursor: pointer; font: inherit; font-size: 14px; font-weight: 700; border-radius: 12px; }

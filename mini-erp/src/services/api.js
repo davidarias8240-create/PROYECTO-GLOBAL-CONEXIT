@@ -52,6 +52,10 @@ export function obtenerRegistrosEntidad(entity, archivados = false) {
   });
 }
 
+export function obtenerPlanesPublicos() {
+  return request("planes/publicos.php", { credentials: "omit" });
+}
+
 export function guardarRegistroEntidad(entity, data, id = null) {
   if (id === null) {
     return solicitarEntidad(entity, "crear.php", {
