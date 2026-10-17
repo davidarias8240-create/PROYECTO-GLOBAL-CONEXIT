@@ -38,6 +38,10 @@ export function verificarSesionAdmin() {
   return request("admin/auth.php");
 }
 
+export function obtenerResumenDashboard() {
+  return request("dashboard/resumen.php");
+}
+
 async function solicitarEntidad(entity, file, options) {
   return request(`${entity}/${file}${options?.query || ""}`, options);
 }

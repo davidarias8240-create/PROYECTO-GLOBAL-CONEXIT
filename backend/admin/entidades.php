@@ -174,7 +174,7 @@ function obtenerOpcionesRelacion(PDO $pdo, array $configuracion, string $tabla, 
     $where = $filters ? " WHERE " . implode(" AND ", $filters) : "";
     $query = $pdo->prepare(
         "SELECT {$keySql} AS id, {$candidateSql} FROM {$tableSql}{$where}
-         ORDER BY {$keySql} DESC LIMIT 1000"
+         ORDER BY {$keySql} ASC LIMIT 1000"
     );
     $query->execute($params);
     $options = [];
@@ -247,7 +247,7 @@ try {
                 AND b.id_registro COLLATE utf8mb4_unicode_ci =
                     CAST({$keySql} AS CHAR) COLLATE utf8mb4_unicode_ci";
         }
-        $sql .= " WHERE {$archiveFilter} ORDER BY {$keySql} DESC LIMIT 1000";
+        $sql .= " WHERE {$archiveFilter} ORDER BY {$keySql} ASC LIMIT 1000";
         $stmt = $pdo->prepare($sql);
         if ($definicion["archivable"]) {
             $stmt->execute([":archive_entity" => $entidad]);

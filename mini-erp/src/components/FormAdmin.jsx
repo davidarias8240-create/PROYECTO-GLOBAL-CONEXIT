@@ -18,7 +18,7 @@ function FormAdmin() {
                 correo: formData.get("correo"),
                 contrasena: formData.get("contrasena"),
             });
-            navigate("/usuarios");
+            navigate("/dashboard");
         } catch (loginError) {
             setError(loginError.message);
         } finally {
