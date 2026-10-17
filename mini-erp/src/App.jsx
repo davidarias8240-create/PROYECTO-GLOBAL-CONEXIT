@@ -5,6 +5,7 @@ import Home from "./pages/home";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ClientPortal from "./pages/interfazcliente";
 import EntityAdmin from "./pages/EntidadAdmin";
+import Dashboard from "./pages/Dashboard";
 import Desactivados from "./pages/Desactivados";
 import { adminEntities } from "./config/adminEntities";
 
@@ -19,6 +20,11 @@ function App() {
                 <Route path="/admin" element={
                         <Login />
                     }/>
+                <Route path="/dashboard" element={
+                    <DashboardLayout>
+                        <Dashboard />
+                    </DashboardLayout>
+                }/>
                 <Route path="/desactivados" element={
                         <DashboardLayout>
                             <Desactivados />

@@ -31,6 +31,7 @@ const entityIcons = {
 };
 
 const iconPaths = {
+    dashboard: "M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z",
     administration: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4 1.6 1.4 1.1-1.4 2.4-1.7-.7a8 8 0 0 1-2 .9l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-2-.9l-1.7.7-1.4-2.4 1.4-1.1a7 7 0 0 1 0-2.3l-1.4-1.1 1.4-2.4 1.7.7a8 8 0 0 1 2-.9l.3-1.8h2.8l.3 1.8a8 8 0 0 1 2 .9l1.7-.7 1.4 2.4-1.4 1.1a7 7 0 0 1 0 2.3Z",
     clients: "M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2m6-10a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-7.8a4 4 0 0 1 0 7.6m2 4.2a4 4 0 0 1 2 3.5V21",
     services: "m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5",
@@ -116,6 +117,10 @@ function Sidebar() {
             </div>
 
             <nav className="sidebar-navigation" aria-label="Navegación administrativa">
+                <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard">
+                    <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
+                    <span>Dashboard</span>
+                </NavLink>
                 {groups.map(({ label, icon, entities }) => (
                     <section className="sidebar-group" key={label}>
                         <button
