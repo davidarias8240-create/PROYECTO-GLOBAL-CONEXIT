@@ -229,6 +229,7 @@ textarea {
 .navbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   min-height: 78px;
   padding: 16px 28px;
   background: #faf8f2;
@@ -237,6 +238,28 @@ textarea {
 }
 
 .navbar-brand { color: #211e1b; font-size: 1.15rem; font-weight: 700; }
+
+.notification-bell { position: relative; }
+.notification-bell-button { position: relative; display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #e6ddcf; border-radius: 12px; color: #5d534d; background: #fffefa; cursor: pointer; }
+.notification-bell-button:hover, .notification-bell-button[aria-expanded="true"] { color: #d95d08; background: #fff0e5; }
+.notification-bell-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.notification-badge { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; padding: 0 4px; display: grid; place-items: center; border: 2px solid #faf8f2; border-radius: 20px; color: #fff; background: #e9650a; font-size: 0.64rem; font-weight: 800; }
+.notification-popover { position: absolute; z-index: 20; top: calc(100% + 10px); right: 0; width: min(360px, calc(100vw - 24px)); overflow: hidden; border: 1px solid #e8dfd1; border-radius: 14px; background: #fffefa; box-shadow: 0 16px 38px rgba(42, 31, 21, 0.16); }
+.notification-popover-heading { display: flex; justify-content: space-between; align-items: center; padding: 15px 17px; border-bottom: 1px solid #eee7dc; color: #33271f; }
+.notification-popover-heading span { color: #8b7b6a; font-size: 0.75rem; }
+.notification-popover ul { max-height: 360px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.notification-popover li { display: flex; gap: 11px; padding: 13px 16px; border-bottom: 1px solid #f0ebe3; }
+.notification-popover li:last-child { border-bottom: 0; }
+.notification-dot { width: 8px; height: 8px; flex: 0 0 8px; margin-top: 6px; border-radius: 50%; background: #ef7410; }
+.notification-popover li strong { color: #352c25; font-size: 0.82rem; }
+.notification-popover li p { margin: 3px 0; color: #75695e; font-size: 0.78rem; }
+.notification-popover li time { color: #998d80; font-size: 0.7rem; }
+.notification-empty { margin: 0; padding: 18px; color: #75695e; font-size: 0.82rem; }
+.welcome-toast { position: fixed; z-index: 1100; top: 20px; right: 24px; display: flex; align-items: center; gap: 12px; width: min(390px, calc(100vw - 32px)); padding: 14px 15px; border: 1px solid rgba(239, 116, 16, 0.24); border-radius: 14px; color: #4d392b; background: #fffefa; box-shadow: 0 14px 36px rgba(42, 31, 21, 0.18); animation: welcome-toast-in 0.25s ease both; }
+.welcome-toast-icon { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 50%; color: #fff; background: linear-gradient(145deg, #e9650a, #f3a321); font-weight: 800; }
+.welcome-toast p { flex: 1; margin: 0; font-size: 0.9rem; font-weight: 700; }
+.welcome-toast button { padding: 0 3px; border: 0; color: #8b7b6a; background: transparent; font-size: 1.3rem; cursor: pointer; }
+@keyframes welcome-toast-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 
 .admin-customer-form { margin-top: 20px; }
 .admin-customer-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -252,8 +275,8 @@ textarea {
 
 /* barra lateral */
 .sidebar { display: flex; flex: 0 0 250px; flex-direction: column; width: 250px; height: 100vh; min-height: 100vh; position: sticky; top: 0; padding: 26px 12px 18px; background: #f2eee5; color: #3d3428; border-right: 1px solid #e4ddcf; }
-.sidebar-logo-wrap { display: flex; justify-content: center; align-items: center; margin: 0 0 30px; padding: 8px 0 14px; }
-.sidebar-logo { width: 180px; height: auto; object-fit: contain; display: block; filter: drop-shadow(0 1px 2px rgba(76, 62, 43, 0.3)); }
+.sidebar-logo-wrap { display: flex; justify-content: center; align-items: center; min-height: 92px; margin: 0 0 30px; padding: 10px 8px; border: 1px solid rgba(239, 116, 16, 0.55); border-radius: 14px; background: linear-gradient(135deg, #111111, #292929); box-shadow: 0 8px 18px rgba(17, 17, 17, 0.16); }
+.sidebar-logo { width: 180px; max-width: 100%; height: auto; object-fit: contain; display: block; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28)); }
 .sidebar-navigation { flex: 1 1 auto; min-height: 0; padding-right: 3px; overflow-y: auto; }
 .sidebar-group { margin-bottom: 18px; }
 .sidebar-group-title { margin: 0 0 5px; padding: 0 14px; color: #8b7b6a; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; }

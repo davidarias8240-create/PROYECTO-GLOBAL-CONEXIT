@@ -30,6 +30,7 @@ try {
         trim($data["documento"]),
         trim($data["direccion"])
     );
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare(
         "INSERT INTO solicitud_servicio
             (nombre_contacto, correo, telefono, tipo_solicitud, mensaje)
@@ -43,12 +44,28 @@ try {
         ":mensaje" => $message
     ]);
 
+    $audit = $pdo->prepare(
+        "INSERT INTO auditoria (id_usuario, entidad, id_entidad, accion, detalle)
+         VALUES (NULL, 'solicitud_servicio', :id_entidad, 'CREAR', :detalle)"
+    );
+    $audit->execute([
+        ":id_entidad" => (string) $pdo->lastInsertId(),
+        ":detalle" => json_encode(
+            ["tipo_solicitud" => "CONTRATACION"],
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        )
+    ]);
+    $pdo->commit();
+
     http_response_code(201);
     echo json_encode([
         "success" => true,
         "message" => "Solicitud de contratación registrada correctamente"
     ], JSON_UNESCAPED_UNICODE);
 } catch (PDOException $exception) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log("Error registrando solicitud pública de contratación: " . $exception->getMessage());
     http_response_code(500);
     echo json_encode(["error" => "No se pudo registrar la solicitud"], JSON_UNESCAPED_UNICODE);

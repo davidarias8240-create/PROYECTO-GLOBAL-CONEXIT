@@ -113,7 +113,7 @@ function Sidebar() {
     return (
         <aside className="sidebar">
             <div className="sidebar-logo-wrap">
-                <img src={logo} alt="Mini ERP" className="sidebar-logo" />
+                <img src={logo} alt="Global Conexit" className="sidebar-logo" />
             </div>
 
             <nav className="sidebar-navigation" aria-label="Navegación administrativa">

@@ -30,7 +30,7 @@ function Formcliente({ onClose }) {
                 numero_documento: documentNumber,
                 contrasena: password,
             });
-            navigate("/cliente");
+            navigate("/cliente", { state: { welcome: true } });
         } catch (loginError) {
             setError(loginError.message);
         } finally {

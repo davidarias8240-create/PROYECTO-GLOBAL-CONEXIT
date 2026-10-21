@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { cerrarSesionCliente, obtenerPerfilCliente } from "../services/api";
+import ToastMessage from "../components/ToastMessage";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
@@ -85,10 +86,15 @@ function SupportView({ perfil }) { return <><ClientHeader title="Soporte / Falla
 function CertificateView({ perfil }) { return <><ClientHeader title="Paz y Salvo" subtitle="Certificado de no adeudo con Global Conexit" /><section className="certificate dashboard-card"><div className="certificate-title"><h2>CERTIFICADO DE PAZ Y SALVO</h2><p>Global Conexit S.A.S. · NIT 900.123.456-7</p></div><p>Por medio del presente documento, <strong>Global Conexit S.A.S.</strong>, identificada con NIT 900.123.456-7, certifica que el(la) señor(a):</p><div className="certificate-data"><Info label="Nombre completo" value={perfil.nombres} /><Info label="Documento de identidad" value={`${perfil.tipo_documento} ${perfil.numero_documento}`} /><Info label="Contrato" value="#GC-2022-004891" /><Info label="Servicio" value="Plan Familiar — 300 Mbps" /><Info label="Dirección del servicio" value={perfil.direcciones || "No registrada"} /></div><p>Se encuentra <strong className="green">a PAZ Y SALVO</strong> con todas sus obligaciones económicas con esta empresa a la fecha de expedición de este documento.</p><div className="certificate-dates"><Info label="Fecha de expedición" value="02 de Septiembre de 2026" /><Info label="Válido hasta" value="02 de Octubre de 2026" /></div><small className="helper-text">Este certificado es de carácter informativo y tiene validez de 30 días calendario a partir de su expedición.</small><div className="certificate-actions"><button className="submit-button">⇩ Descargar PDF</button><button className="secondary-button">▣ Imprimir</button></div></section></>; }
 
 function ClientPortal() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const [currentView, setCurrentView] = useState("plan");
 	const [perfil, setPerfil] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
+	const [welcomeMessage, setWelcomeMessage] = useState(
+		() => location.state?.welcome ? "¡Bienvenido de nuevo a Global Conexit!" : ""
+	);
 
 	useEffect(() => {
 		obtenerPerfilCliente()
@@ -96,6 +102,11 @@ function ClientPortal() {
 			.catch((profileError) => setError(profileError.message))
 			.finally(() => setLoading(false));
 	}, []);
+	useEffect(() => {
+		if (location.state?.welcome) {
+			navigate(location.pathname, { replace: true, state: null });
+		}
+	}, [location.pathname, location.state, navigate]);
 
 	if (loading) {
 		return <main className="client-main"><p role="status">Cargando información de tu cuenta...</p></main>;
@@ -114,7 +125,7 @@ function ClientPortal() {
 		soporte: <SupportView perfil={perfil} />,
 	};
 
-	return <div className="client-portal"><ClientSidebar currentView={currentView} setCurrentView={setCurrentView} perfil={perfil} /><main className="client-main">{content[currentView]}</main></div>;
+	return <div className="client-portal"><ToastMessage message={welcomeMessage} onClose={() => setWelcomeMessage("")} /><ClientSidebar currentView={currentView} setCurrentView={setCurrentView} perfil={perfil} /><main className="client-main">{content[currentView]}</main></div>;
 }
 
 export default ClientPortal;
