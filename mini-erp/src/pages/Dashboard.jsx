@@ -332,7 +332,7 @@ function Dashboard() {
                 ) : activityRows.map((item) => (
                   <div className="dashboard-activity-item" key={item.id_auditoria}>
                     <span className="dashboard-activity-mark" aria-hidden="true">✓</span>
-                    <div><strong>{item.accion} · {item.entidad}</strong><span>Registro #{item.id_entidad}{item.usuario ? ` · ${item.usuario}` : ""}</span></div>
+                    <div><strong>{item.accion} · {item.entidad}</strong><span>{item.usuario || "Movimiento administrativo"}</span></div>
                     <time dateTime={item.fecha}>{dateLabel(item.fecha, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</time>
                   </div>
                 ))}
@@ -345,8 +345,8 @@ function Dashboard() {
               </div>
               <DataTable
                 columns={[
-                  { key: "orden", label: "Orden", render: (row) => `OS-${row.id_orden}` },
-                  { key: "cliente", label: "Cliente / tipo", render: (row) => <><strong>{row.cliente}</strong><small>{row.tipo}</small></> },
+                  { key: "tipo", label: "Servicio", render: (row) => row.tipo },
+                  { key: "cliente", label: "Cliente", render: (row) => <strong>{row.cliente}</strong> },
                   { key: "fecha", label: "Programación", render: (row) => dateLabel(row.fecha_programada, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) },
                   { key: "estado", label: "Estado", render: (row) => <span className={`dashboard-status status-${row.estado.toLowerCase()}`}>{row.estado.replaceAll("_", " ")}</span> },
                 ]}
