@@ -74,7 +74,12 @@ function Desactivados() {
             <table className="table table-striped table-hover">
               <thead className="table-dark">
                 <tr>
-                  {metadata.columnas.map((column) => <th key={column.name}>{humanize(column.name)}</th>)}
+                  {metadata.columnas
+                    .filter((column) =>
+                      !column.name.startsWith("id_")
+                      || (column.name !== metadata.clave && column.relation)
+                    )
+                    .map((column) => <th key={column.name}>{humanize(column.name.replace(/^id_/, ""))}</th>)}
                   <th>Fecha de baja</th>
                   <th>Estado anterior</th>
                   <th>Acciones</th>
@@ -86,7 +91,10 @@ function Desactivados() {
                   const restoreKey = `${entity}:${id}`;
                   return (
                     <tr key={restoreKey}>
-                      {metadata.columnas.map((column) => (
+                      {metadata.columnas.filter((column) =>
+                        !column.name.startsWith("id_")
+                        || (column.name !== metadata.clave && column.relation)
+                      ).map((column) => (
                         <td key={column.name}>
                           {column.relation
                             ? column.options?.find((option) => String(option.value) === String(record[column.name]))?.label || record[column.name] || "—"

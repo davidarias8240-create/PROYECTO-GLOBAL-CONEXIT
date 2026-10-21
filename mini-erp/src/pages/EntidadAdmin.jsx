@@ -54,6 +54,7 @@ function defaultFieldValue(column) {
 }
 
 function EntityField({ column, value, onChange, disabled = false }) {
+  const [relationSearch, setRelationSearch] = useState("");
   const label = humanize(column.name);
   const required = !column.nullable && column.default === null && !column.generated;
   const isBoolean = column.type === "tinyint" && column.columnType.includes("(1)");
@@ -77,19 +78,42 @@ function EntityField({ column, value, onChange, disabled = false }) {
     const options = column.enum?.length
       ? column.enum.map((option) => ({ value: option, label: option }))
       : column.options || [];
+    const query = relationSearch.trim().toLocaleLowerCase("es");
+    const filteredOptions = query
+      ? options.filter((option) => option.label.toLocaleLowerCase("es").includes(query))
+      : options;
+    const selectedOption = options.find((option) => String(option.value) === String(value));
 
     return (
       <label className="admin-entity-field">
         <span>{label}{required ? " *" : ""}</span>
+        {column.relation && (
+          <input
+            className="form-control"
+            type="search"
+            aria-label={`Buscar ${label.toLocaleLowerCase("es")}`}
+            placeholder="Buscar por nombre..."
+            value={relationSearch}
+            onChange={(event) => setRelationSearch(event.target.value)}
+            disabled={disabled}
+          />
+        )}
+        {/* El buscador solo filtra las etiquetas; el select conserva el ID que requiere el backend. */}
         <select
           className="form-select"
           value={value ?? ""}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setRelationSearch("");
+          }}
           required={required}
           disabled={disabled}
         >
           <option value="">Selecciona...</option>
-          {options.map((option) => (
+          {selectedOption && !filteredOptions.some((option) => String(option.value) === String(value)) && (
+            <option value={selectedOption.value}>{selectedOption.label}</option>
+          )}
+          {filteredOptions.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
@@ -173,6 +197,14 @@ function EntityAdmin({ entity }) {
       !(entity === "clientes" && column.name === "id_usuario")
     ),
     [entity, metadata]
+  );
+
+  // La clave primaria y referencias sin etiqueta se ocultan; las claves foráneas muestran su nombre relacionado.
+  const tableColumns = useMemo(
+    () => visibleColumns.filter((column) =>
+      !column.name.startsWith("id_") || (column.name !== metadata?.clave && column.relation)
+    ),
+    [metadata, visibleColumns]
   );
 
   const formColumns = useMemo(
@@ -671,14 +703,14 @@ function EntityAdmin({ entity }) {
         <table className="table table-striped table-hover">
           <thead className="table-dark">
             <tr>
-              {(visibleColumns || []).map((column) => <th key={column.name}>{humanize(column.name)}</th>)}
+              {tableColumns.map((column) => <th key={column.name}>{humanize(column.name.replace(/^id_/, ""))}</th>)}
               {!metadata?.soloLectura && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={(metadata?.columnas.length || 0) + (metadata?.soloLectura ? 0 : 1)} className="text-center text-muted">
+                <td colSpan={tableColumns.length + (metadata?.soloLectura ? 0 : 1)} className="text-center text-muted">
                   No hay registros para mostrar.
                 </td>
               </tr>
@@ -688,7 +720,7 @@ function EntityAdmin({ entity }) {
                 onClick={entity === "clientes" ? () => openCustomerDetail(row) : undefined}
                 style={entity === "clientes" ? { cursor: "pointer" } : undefined}
               >
-                {visibleColumns.map((column) => (
+                {tableColumns.map((column) => (
                   <td key={column.name}>{renderCell(column, row)}</td>
                 ))}
                 {!metadata.soloLectura && (

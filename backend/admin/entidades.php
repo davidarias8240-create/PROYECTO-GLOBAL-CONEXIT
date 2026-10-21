@@ -141,19 +141,30 @@ function obtenerOpcionesRelacion(PDO $pdo, array $configuracion, string $tabla, 
         "cliente" => ["nombres", "numero_cliente"],
         "rol", "plan" => ["nombre"],
         "direccion" => ["direccion", "ciudad"],
-        "contrato" => ["id_contrato", "estado"],
+        "contrato" => ["cliente_nombre", "cliente_numero", "plan_nombre", "fecha_inicio"],
         "periodo_facturacion" => ["fecha_inicio", "fecha_fin"],
         "factura" => ["numero"],
         "ticket" => ["asunto"],
         default => [$columnaClave]
     };
 
-    $candidateSql = implode(",", array_map(
-        static fn(string $column): string => "`" . str_replace("`", "``", $column) . "`",
-        $labelCandidates
-    ));
     $tableSql = "`" . str_replace("`", "``", $tabla) . "`";
     $keySql = "`" . str_replace("`", "``", $columnaClave) . "`";
+    if ($tabla === "contrato") {
+        // Para elegir una factura, se identifica el contrato por el cliente y el plan, no por su ID interno.
+        $candidateSql = "contrato.id_contrato AS id, cliente.nombres AS cliente_nombre,
+            cliente.numero_cliente AS cliente_numero, plan.nombre AS plan_nombre,
+            contrato.fecha_inicio";
+        $fromSql = "contrato
+            INNER JOIN cliente ON cliente.id_cliente = contrato.id_cliente
+            INNER JOIN plan ON plan.id_plan = contrato.id_plan";
+    } else {
+        $candidateSql = implode(",", array_map(
+            static fn(string $column): string => "`" . str_replace("`", "``", $column) . "`",
+            $labelCandidates
+        ));
+        $fromSql = "{$tableSql}";
+    }
     $filters = [];
     $params = [];
     if ($tabla === "rol") {
@@ -173,8 +184,8 @@ function obtenerOpcionesRelacion(PDO $pdo, array $configuracion, string $tabla, 
     }
     $where = $filters ? " WHERE " . implode(" AND ", $filters) : "";
     $query = $pdo->prepare(
-        "SELECT {$keySql} AS id, {$candidateSql} FROM {$tableSql}{$where}
-         ORDER BY {$keySql} ASC LIMIT 1000"
+        "SELECT " . ($tabla === "contrato" ? $candidateSql : "{$keySql} AS id, {$candidateSql}")
+        . " FROM {$fromSql}{$where} ORDER BY {$tableSql}.{$keySql} ASC LIMIT 1000"
     );
     $query->execute($params);
     $options = [];

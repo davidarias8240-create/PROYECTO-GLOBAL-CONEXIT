@@ -227,9 +227,7 @@ CREATE TABLE factura (
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
-    CONSTRAINT uq_factura_contrato_periodo
-        UNIQUE (id_contrato, id_periodo),
-
+    -- La misma combinación contrato/período puede generar varias facturas.
     CONSTRAINT chk_factura_total
         CHECK (total >= 0),
 
