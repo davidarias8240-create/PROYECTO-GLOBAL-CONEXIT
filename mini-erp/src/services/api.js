@@ -42,6 +42,10 @@ export function obtenerResumenDashboard() {
   return request("dashboard/resumen.php");
 }
 
+export function obtenerNotificacionesAuditoria() {
+  return request("auditoria/notificaciones.php");
+}
+
 async function solicitarEntidad(entity, file, options) {
   return request(`${entity}/${file}${options?.query || ""}`, options);
 }
