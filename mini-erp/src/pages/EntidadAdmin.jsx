@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
+  obtenerDetalleCliente,
   obtenerMetadatosEntidad,
   obtenerRegistrosEntidad,
 } from "../services/api";
@@ -134,7 +135,9 @@ function EntityAdmin({ entity }) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingCustomerDetail, setLoadingCustomerDetail] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -160,16 +163,25 @@ function EntityAdmin({ entity }) {
     setMetadata(null);
     setRows([]);
     setShowForm(false);
+    setSelectedCustomer(null);
+    setLoadingCustomerDetail(false);
     loadData();
   }, [loadData]);
 
-  const formColumns = useMemo(
+  const visibleColumns = useMemo(
     () => (metadata?.columnas || []).filter((column) =>
+      !(entity === "clientes" && column.name === "id_usuario")
+    ),
+    [entity, metadata]
+  );
+
+  const formColumns = useMemo(
+    () => visibleColumns.filter((column) =>
       column.name !== metadata.clave
       && !column.generated
       && column.name !== "contrasena_hash"
     ),
-    [metadata]
+    [metadata, visibleColumns]
   );
 
   const isClientRole = useMemo(() => {
@@ -197,6 +209,24 @@ function EntityAdmin({ entity }) {
     setValues({});
     setCustomer({});
     setPassword("");
+  };
+
+  const closeCustomerDetail = () => {
+    setSelectedCustomer(null);
+  };
+
+  const openCustomerDetail = async (row) => {
+    if (entity !== "clientes") return;
+    setLoadingCustomerDetail(true);
+    setError("");
+    try {
+      const detail = await obtenerDetalleCliente(row[metadata.clave]);
+      setSelectedCustomer(detail);
+    } catch (detailError) {
+      setError(detailError.message);
+    } finally {
+      setLoadingCustomerDetail(false);
+    }
   };
 
   const startCreate = () => {
@@ -278,6 +308,246 @@ function EntityAdmin({ entity }) {
     }
   };
 
+  const formatMoney = (value) =>
+    new Intl.NumberFormat("es-CO", {
+      style: "currency",
+      currency: "COP",
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+  const formatDate = (value) => {
+    if (!value) return "Sin fecha";
+    const date = new Date(value.includes(" ") ? value.replace(" ", "T") : value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat("es-CO", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(date);
+  };
+
+  const renderCustomerDetail = () => {
+    if (!selectedCustomer || !selectedCustomer.cliente) return null;
+
+    const { cliente, resumen = {}, direcciones = [], contratos = [], solicitudes = [], tickets = [], interacciones = [], notificaciones = [], facturas = [], pagos = [], ajustes = [], historial = [] } = selectedCustomer;
+    const renderList = (items, emptyLabel) =>
+      items.length ? (
+        <ul className="list-group list-group-flush">
+          {items.map((item, index) => (
+            <li key={`${item.id || index}-${item.numero || item.asunto || item.id_factura || index}`} className="list-group-item px-0">
+              {typeof item === "string" ? item : (
+                <div className="d-flex justify-content-between gap-3 align-items-start flex-wrap">
+                  <div>
+                    <strong>{item.numero || item.numero_cliente || item.asunto || item.numero_factura || item.nombre || item.direccion || item.motivo || item.id_factura || item.id_ticket || item.id_solicitud || item.id_pago || item.id_ajuste || item.id_notificacion || item.id_contrato || item.id_direccion || "Registro"}</strong>
+                    {(item.estado || item.tipo || item.plan_nombre || item.fecha || item.fecha_emision || item.fecha_creacion || item.fecha_inicio || item.fecha_fin || item.canal || item.motivo) && (
+                      <div className="text-muted small">
+                        {item.estado || item.tipo || item.plan_nombre || item.fecha || item.fecha_emision || item.fecha_creacion || item.fecha_inicio || item.fecha_fin || item.canal || item.motivo}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-end small">
+                    {item.valor != null && <div>{formatMoney(item.valor)}</div>}
+                    {item.total != null && <div>{formatMoney(item.total)}</div>}
+                    {item.saldo != null && <div>Saldo: {formatMoney(item.saldo)}</div>}
+                  </div>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : <p className="text-muted mb-0">{emptyLabel}</p>;
+
+    return (
+      <div className="card border-0 shadow-sm mt-4">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+            <div>
+              <h3 className="h5 mb-1">Detalle del cliente</h3>
+              <div className="text-muted">{cliente.nombres} · {cliente.numero_cliente}</div>
+            </div>
+            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={closeCustomerDetail}>Cerrar</button>
+          </div>
+
+          <div className="row g-3 mb-4">
+            <div className="col-md-2">
+              <div className="border rounded p-3 h-100">
+                <small className="text-muted d-block">Servicios</small>
+                <strong>{resumen.cantidad_servicios ?? contratos.length}</strong>
+              </div>
+            </div>
+            <div className="col-md-2">
+              <div className="border rounded p-3 h-100">
+                <small className="text-muted d-block">Solicitudes</small>
+                <strong>{resumen.cantidad_solicitudes ?? solicitudes.length}</strong>
+              </div>
+            </div>
+            <div className="col-md-2">
+              <div className="border rounded p-3 h-100">
+                <small className="text-muted d-block">Tickets</small>
+                <strong>{resumen.cantidad_tickets ?? tickets.length}</strong>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="border rounded p-3 h-100">
+                <small className="text-muted d-block">Total facturado</small>
+                <strong>{formatMoney(resumen.total_facturado)}</strong>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="border rounded p-3 h-100">
+                <small className="text-muted d-block">Saldo pendiente</small>
+                <strong>{formatMoney(resumen.saldo_pendiente)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="row g-4">
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Resumen general</h4>
+                <dl className="row mb-0">
+                  <dt className="col-sm-5">Identificación</dt>
+                  <dd className="col-sm-7">{cliente.tipo_documento} · {cliente.numero_documento}</dd>
+                  <dt className="col-sm-5">Teléfono</dt>
+                  <dd className="col-sm-7">{cliente.telefono || "No registrado"}</dd>
+                  <dt className="col-sm-5">Correo</dt>
+                  <dd className="col-sm-7">{cliente.correo || cliente.correo_usuario || "No registrado"}</dd>
+                  <dt className="col-sm-5">Estado</dt>
+                  <dd className="col-sm-7">{cliente.estado}</dd>
+                  <dt className="col-sm-5">Número cliente</dt>
+                  <dd className="col-sm-7">{cliente.numero_cliente}</dd>
+                </dl>
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Direcciones</h4>
+                {renderList(direcciones.map((direccion) => ({
+                  ...direccion,
+                  nombre: `${direccion.direccion} · ${direccion.ciudad} · ${direccion.departamento}`,
+                  estado: direccion.estado,
+                })), "No hay direcciones registradas")}
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Servicios y contratos</h4>
+                {renderList(contratos.map((contrato) => ({
+                  ...contrato,
+                  numero: `Contrato #${contrato.id_contrato}`,
+                  plan_nombre: contrato.plan_nombre,
+                  estado: contrato.estado,
+                  fecha_inicio: formatDate(contrato.fecha_inicio),
+                })), "No hay contratos asociados")}
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Solicitudes y tickets</h4>
+                <div className="mb-3">
+                  <strong className="d-block mb-2">Solicitudes</strong>
+                  {renderList(solicitudes.map((solicitud) => ({
+                    ...solicitud,
+                    numero: `Solicitud #${solicitud.id_solicitud}`,
+                    estado: solicitud.estado,
+                    tipo: solicitud.tipo_solicitud,
+                    fecha: formatDate(solicitud.fecha),
+                  })), "No hay solicitudes")}
+                </div>
+                <div>
+                  <strong className="d-block mb-2">Tickets</strong>
+                  {renderList(tickets.map((ticket) => ({
+                    ...ticket,
+                    numero: `Ticket #${ticket.id_ticket}`,
+                    estado: ticket.estado,
+                    motivo: ticket.asunto,
+                    fecha: formatDate(ticket.fecha_creacion),
+                  })), "No hay tickets")}
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Facturación y finanzas</h4>
+                <div className="mb-3">
+                  <strong className="d-block mb-2">Facturas</strong>
+                  {renderList(facturas.map((factura) => ({
+                    ...factura,
+                    numero: `Factura ${factura.numero}`,
+                    estado: factura.estado,
+                    total: factura.total,
+                    saldo: factura.saldo,
+                    fecha_emision: formatDate(factura.fecha_emision),
+                  })), "No hay facturas")}
+                </div>
+                <div className="mb-3">
+                  <strong className="d-block mb-2">Pagos</strong>
+                  {renderList(pagos.map((pago) => ({
+                    ...pago,
+                    numero: `Pago #${pago.id_pago}`,
+                    valor: pago.valor,
+                    estado: pago.estado,
+                    fecha: formatDate(pago.fecha),
+                  })), "No hay pagos registrados")}
+                </div>
+                <div>
+                  <strong className="d-block mb-2">Ajustes</strong>
+                  {renderList(ajustes.map((ajuste) => ({
+                    ...ajuste,
+                    numero: `Ajuste #${ajuste.id_ajuste}`,
+                    valor: ajuste.valor,
+                    tipo: ajuste.tipo,
+                    motivo: ajuste.motivo,
+                    fecha: formatDate(ajuste.fecha),
+                  })), "No hay ajustes")}
+                </div>
+              </div>
+            </div>
+
+            <div className="col-lg-6">
+              <div className="border rounded p-3 h-100">
+                <h4 className="h6 mb-3">Historial</h4>
+                <div className="mb-3">
+                  <strong className="d-block mb-2">Interacciones</strong>
+                  {renderList(interacciones.map((interaccion) => ({
+                    ...interaccion,
+                    numero: `Interacción #${interaccion.id_interaccion}`,
+                    estado: interaccion.canal,
+                    motivo: interaccion.razon,
+                    fecha: formatDate(interaccion.fecha),
+                  })), "No hay interacciones")}
+                </div>
+                <div className="mb-3">
+                  <strong className="d-block mb-2">Notificaciones</strong>
+                  {renderList(notificaciones.map((notificacion) => ({
+                    ...notificacion,
+                    numero: `Notif. #${notificacion.id_notificacion}`,
+                    estado: notificacion.estado_entrega,
+                    motivo: notificacion.asunto,
+                    fecha: formatDate(notificacion.fecha),
+                  })), "No hay notificaciones")}
+                </div>
+                <div>
+                  <strong className="d-block mb-2">Auditoría</strong>
+                  {renderList(historial.map((item) => ({
+                    ...item,
+                    numero: `${item.entidad} / ${item.id_entidad}`,
+                    estado: item.accion,
+                    fecha: formatDate(item.fecha),
+                  })), "No hay historial disponible")}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCell = (column, row) => {
     const value = row[column.name];
     if (value === null || value === undefined || value === "") return "—";
@@ -309,6 +579,9 @@ function EntityAdmin({ entity }) {
 
       {notice && <p className="alert alert-success" role="status">{notice}</p>}
       {error && <p className="alert alert-danger" role="alert">{error}</p>}
+
+      {entity === "clientes" && selectedCustomer && renderCustomerDetail()}
+      {entity === "clientes" && loadingCustomerDetail && <p className="alert alert-info">Cargando detalle del cliente...</p>}
 
       {showForm && (
         <form className="dashboard-card admin-entity-form mb-4" onSubmit={handleSave}>
@@ -398,7 +671,7 @@ function EntityAdmin({ entity }) {
         <table className="table table-striped table-hover">
           <thead className="table-dark">
             <tr>
-              {(metadata?.columnas || []).map((column) => <th key={column.name}>{humanize(column.name)}</th>)}
+              {(visibleColumns || []).map((column) => <th key={column.name}>{humanize(column.name)}</th>)}
               {!metadata?.soloLectura && <th>Acciones</th>}
             </tr>
           </thead>
@@ -410,16 +683,38 @@ function EntityAdmin({ entity }) {
                 </td>
               </tr>
             ) : visibleRows.map((row) => (
-              <tr key={row[metadata.clave]}>
-                {metadata.columnas.map((column) => (
+              <tr
+                key={row[metadata.clave]}
+                onClick={entity === "clientes" ? () => openCustomerDetail(row) : undefined}
+                style={entity === "clientes" ? { cursor: "pointer" } : undefined}
+              >
+                {visibleColumns.map((column) => (
                   <td key={column.name}>{renderCell(column, row)}</td>
                 ))}
                 {!metadata.soloLectura && (
                   <td>
-                    <div className="d-flex gap-2">
-                      <button type="button" className="btn btn-warning btn-sm" onClick={() => startEdit(row)}>Editar</button>
+                    <div className="d-flex gap-2 flex-wrap">
+                      {entity === "clientes" && (
+                        <button
+                          type="button"
+                          className="btn btn-info btn-sm text-white"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openCustomerDetail(row);
+                          }}
+                        >
+                          Ver detalle
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-warning btn-sm" onClick={(event) => {
+                        event.stopPropagation();
+                        startEdit(row);
+                      }}>Editar</button>
                       {metadata.archivable && (
-                        <button type="button" className="btn btn-outline-danger btn-sm" onClick={() => handleArchive(row)}>
+                        <button type="button" className="btn btn-outline-danger btn-sm" onClick={(event) => {
+                          event.stopPropagation();
+                          handleArchive(row);
+                        }}>
                           Desactivar
                         </button>
                       )}

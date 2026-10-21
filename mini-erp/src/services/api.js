@@ -56,6 +56,10 @@ export function obtenerRegistrosEntidad(entity, archivados = false) {
   });
 }
 
+export function obtenerDetalleCliente(idCliente) {
+  return request(`clientes/detalle.php?id_cliente=${encodeURIComponent(idCliente)}`);
+}
+
 export function obtenerPlanesPublicos() {
   return request("planes/publicos.php", { credentials: "omit" });
 }
