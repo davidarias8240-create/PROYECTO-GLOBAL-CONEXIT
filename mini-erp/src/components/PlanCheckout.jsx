@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { crearSolicitudPublica } from "../services/api";
 
-const whatsappNumber = "573059157061";
-
 function PlanCheckout({ plan, onClose }) {
 	const [step, setStep] = useState("details");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
-	const [customer, setCustomer] = useState(null);
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
@@ -22,13 +19,13 @@ function PlanCheckout({ plan, onClose }) {
 			telefono: String(formValues.telefono).trim(),
 			direccion: String(formValues.direccion).trim(),
 			plan: plan.name,
+			autorizacion_tratamiento: formValues.autorizacionTratamiento === "on",
 		};
 
 		try {
 			const result = await crearSolicitudPublica(newCustomer);
 			if (!result.success) throw new Error(result.message || "No fue posible registrar tus datos.");
-			setCustomer(newCustomer);
-			setStep("payment");
+			setStep("confirmation");
 		} catch (submitError) {
 			setError(submitError.message || "No pudimos conectarnos. Intenta de nuevo en unos minutos.");
 		} finally {
@@ -36,25 +33,20 @@ function PlanCheckout({ plan, onClose }) {
 		}
 	};
 
-	const paymentMessage = encodeURIComponent(
-		`Hola, quiero continuar con la contratación del ${plan.name} (${plan.price}/mes). Mi nombre es ${customer?.nombre} y mi documento es ${customer?.documento}. Por favor envíenme un enlace seguro para realizar el pago y coordinar la instalación en ${customer?.direccion}.`
-	);
-	const paymentUrl = `https://wa.me/${whatsappNumber}?text=${paymentMessage}`;
-
 	return (
 		<div className="plan-checkout-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
 			<section className="plan-checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
 				<header className="plan-checkout-header">
 					<div>
-						<h2 id="checkout-title">{step === "details" ? `Contratar ${plan.name}` : "Continúa con el pago"}</h2>
-						<p>{plan.price}<span> /mes</span></p>
+						<h2 id="checkout-title">{step === "details" ? `Contratar ${plan.name}` : "Solicitud enviada"}</h2>
+						{step === "details" && <p>{plan.price}<span> /mes</span></p>}
 					</div>
 					<button className="plan-checkout-close" type="button" onClick={onClose} aria-label="Cerrar">×</button>
 				</header>
 
 				{step === "details" ? (
 					<form className="plan-checkout-body" onSubmit={handleSubmit}>
-						<p className="plan-checkout-intro">Ingresa tus datos para continuar con el pago y programar tu instalación.</p>
+						<p className="plan-checkout-intro">Ingresa tus datos para enviar tu solicitud. Nuestros representantes te contactarán para continuar con el trámite y ayudarte a elegir el plan que mejor se ajuste a tus necesidades.</p>
 						<label className="checkout-field">
 							Nombre completo
 							<input name="nombre" autoComplete="name" placeholder="Ej. María García" required maxLength="150" />
@@ -83,20 +75,22 @@ function PlanCheckout({ plan, onClose }) {
 							Dirección de instalación
 							<input name="direccion" autoComplete="street-address" placeholder="Calle 123 # 45-67, Bogotá" required maxLength="255" />
 						</label>
+						<label className="checkout-consent">
+							<input name="autorizacionTratamiento" type="checkbox" required />
+							<span>Autorizo el tratamiento de mis datos personales conforme a la Ley 1581 de 2012 para gestionar esta solicitud y contactarme sobre el servicio.</span>
+						</label>
 						{error && <p className="checkout-error" role="alert">{error}</p>}
 						<button className="checkout-submit" type="submit" disabled={isSubmitting}>
-							{isSubmitting ? "Registrando datos..." : "Continuar al pago"}
+							{isSubmitting ? "Enviando solicitud..." : "Enviar solicitud"}
 						</button>
-						<p className="checkout-note">El pago se realiza en un enlace seguro enviado por nuestro equipo. No ingreses datos de tarjeta aquí.</p>
+						<p className="checkout-note">Te contactaremos en un plazo de hasta 5 días hábiles.</p>
 					</form>
 				) : (
-					<div className="plan-checkout-body checkout-payment-step">
+					<div className="plan-checkout-body checkout-confirmation-step">
 						<div className="checkout-success-mark" aria-hidden="true">✓</div>
-						<h3>Datos registrados</h3>
-						<p>Ya tenemos la información de {customer.nombre}. Solicita por WhatsApp tu enlace seguro de pago para el {plan.name}.</p>
-						<div className="checkout-summary"><span>Plan mensual</span><strong>{plan.price} /mes</strong><span>Instalación</span><strong>Gratis</strong></div>
-						<a className="checkout-submit checkout-whatsapp" href={paymentUrl} target="_blank" rel="noreferrer">Solicitar enlace de pago <span aria-hidden="true">↗</span></a>
-						<p className="checkout-note">El servicio se activa cuando el pago sea confirmado por el equipo de Global Conexit.</p>
+						<h3>Solicitud recibida</h3>
+						<p>Tu solicitud ya fue enviada a nuestros representantes. En un plazo de hasta 5 días hábiles se pondrán en contacto contigo para continuar con el trámite de adquisición del servicio y ayudarte a elegir el plan que mejor se ajuste a tus necesidades.</p>
+						<div className="checkout-summary"><span>Plan solicitado</span><strong>{plan.name}</strong></div>
 					</div>
 				)}
 			</section>
