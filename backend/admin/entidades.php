@@ -276,6 +276,18 @@ try {
             responder(["error" => "Esta tabla no permite crear registros"], 405);
         }
         $input = is_array($data["datos"] ?? null) ? $data["datos"] : [];
+        if ($tabla === "cliente") {
+            // Crear un cliente desde esta pantalla también crea su cuenta de acceso con rol CLIENTE.
+            $password = is_string($data["contrasena"] ?? null) ? $data["contrasena"] : "";
+            $correo = is_string($input["correo"] ?? null) ? trim($input["correo"]) : "";
+            if (strlen($password) < 8) {
+                responder(["error" => "La contraseña debe tener al menos 8 caracteres"], 400);
+            }
+            if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                responder(["error" => "Ingresa un correo válido para el cliente"], 400);
+            }
+            unset($input["id_usuario"]);
+        }
         if ($tabla === "usuario") {
             $password = is_string($data["contrasena"] ?? null) ? $data["contrasena"] : "";
             if (strlen($password) < 8) {
@@ -317,16 +329,51 @@ try {
         if (!$values) {
             responder(["error" => "No se recibieron campos para crear el registro"], 400);
         }
+        $rolClienteId = null;
+        if ($tabla === "cliente") {
+            $role = $pdo->prepare(
+                "SELECT id_rol FROM rol
+                 WHERE nombre = 'CLIENTE' AND estado = 'ACTIVO'
+                 LIMIT 1"
+            );
+            $role->execute();
+            $rolClienteId = $role->fetchColumn();
+            if (!$rolClienteId) {
+                responder(["error" => "No existe un rol CLIENTE activo"], 409);
+            }
+        }
         $names = array_keys($values);
         $fieldsSql = implode(", ", array_map(static fn(string $name): string => "`{$name}`", $names));
         $paramsSql = implode(", ", array_map(static fn(string $name): string => ":" . $name, $names));
         $pdo->beginTransaction();
+        if ($tabla === "cliente") {
+            $userInsert = $pdo->prepare(
+                "INSERT INTO usuario (id_rol, correo, contrasena_hash, estado)
+                 VALUES (:id_rol, :correo, :contrasena_hash, 'ACTIVO')"
+            );
+            $userInsert->execute([
+                ":id_rol" => $rolClienteId,
+                ":correo" => $correo,
+                ":contrasena_hash" => password_hash($password, PASSWORD_DEFAULT)
+            ]);
+            $values["id_usuario"] = (string) $pdo->lastInsertId();
+            $names = array_keys($values);
+            $fieldsSql = implode(", ", array_map(static fn(string $name): string => "`{$name}`", $names));
+            $paramsSql = implode(", ", array_map(static fn(string $name): string => ":" . $name, $names));
+        }
         $stmt = $pdo->prepare("INSERT INTO `{$tabla}` ({$fieldsSql}) VALUES ({$paramsSql})");
         $stmt->execute(array_combine(
             array_map(static fn(string $name): string => ":" . $name, $names),
             array_values($values)
         ));
         $newId = (string) $pdo->lastInsertId();
+
+        if ($tabla === "cliente") {
+            auditar($pdo, "usuario", (string) $values["id_usuario"], "CREAR", [
+                "correo" => $correo,
+                "id_rol" => $rolClienteId
+            ]);
+        }
 
         if ($tabla === "usuario") {
             $role = $pdo->prepare("SELECT nombre FROM rol WHERE id_rol = :id_rol");
@@ -444,6 +491,25 @@ try {
         $updateValues[":record_id"] = $id;
         $stmt = $pdo->prepare("UPDATE `{$tabla}` SET {$assignments} WHERE `{$clave}` = :record_id");
         $pdo->beginTransaction();
+        if ($tabla === "cliente" && array_key_exists("correo", $values)) {
+            // El correo también es el usuario de inicio de sesión del cliente vinculado.
+            $linkedUser = $pdo->prepare("SELECT id_usuario FROM cliente WHERE id_cliente = :id_cliente");
+            $linkedUser->execute([":id_cliente" => $id]);
+            $linkedUserId = $linkedUser->fetchColumn();
+            if ($linkedUserId) {
+                if (!is_string($values["correo"]) || !filter_var($values["correo"], FILTER_VALIDATE_EMAIL)) {
+                    $pdo->rollBack();
+                    responder(["error" => "Ingresa un correo válido para la cuenta del cliente"], 400);
+                }
+                $updateUserEmail = $pdo->prepare(
+                    "UPDATE usuario SET correo = :correo WHERE id_usuario = :id_usuario"
+                );
+                $updateUserEmail->execute([
+                    ":correo" => $values["correo"],
+                    ":id_usuario" => $linkedUserId
+                ]);
+            }
+        }
         $stmt->execute($updateValues);
         unset($input["contrasena_hash"]);
         auditar($pdo, $tabla, $id, "EDITAR", $input);

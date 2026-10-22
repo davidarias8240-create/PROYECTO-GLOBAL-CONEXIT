@@ -4,6 +4,7 @@ import {
 	cerrarSesionCliente,
 	obtenerPerfilCliente,
 	obtenerPortalCliente,
+	pagarFacturaSimulada,
 	reportarFallaCliente,
 } from "../services/api";
 import ToastMessage from "../components/ToastMessage";
@@ -38,13 +39,17 @@ function formatDate(value) {
 }
 
 function facturaPendiente(factura) {
-	return Number(factura.saldo) > 0;
+	return ["PENDIENTE", "VENCIDA"].includes(factura.estado) && Number(factura.saldo) > 0;
 }
 
 function estadoFactura(factura) {
-	if (!facturaPendiente(factura)) return { label: "Pagada", className: "paid" };
-	if (factura.estado === "VENCIDA") return { label: "Vencida", className: "pending" };
-	return { label: "Pendiente", className: "pending" };
+	const estados = {
+		PENDIENTE: { label: "Pendiente", className: "pending" },
+		PAGADA: { label: "Pagada", className: "paid" },
+		VENCIDA: { label: "Vencida", className: "overdue" },
+		ANULADA: { label: "Anulada", className: "cancelled" },
+	};
+	return estados[factura.estado] || { label: factura.estado, className: "pending" };
 }
 
 function StatusPill({ children = "Cuenta de cliente" }) {
@@ -176,9 +181,7 @@ function PlanView({ contrato }) {
 function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentView }) {
 	const [filtro, setFiltro] = useState("todas");
 	const visibles = facturas.filter((factura) => {
-		if (filtro === "pendientes") return facturaPendiente(factura);
-		if (filtro === "pagadas") return !facturaPendiente(factura);
-		return true;
+		return filtro === "todas" || factura.estado === filtro;
 	});
 
 	return (
@@ -191,14 +194,20 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 			</div>
 			<section className="dashboard-card invoices-card">
 				<div className="tabs" aria-label="Filtrar facturas">
-					{["todas", "pendientes", "pagadas"].map((tab) => (
+					{[
+						{ id: "todas", label: "Todas" },
+						{ id: "PENDIENTE", label: "Pendientes" },
+						{ id: "PAGADA", label: "Pagadas" },
+						{ id: "VENCIDA", label: "Vencidas" },
+						{ id: "ANULADA", label: "Anuladas" },
+					].map((tab) => (
 						<button
-							className={filtro === tab ? "selected" : ""}
-							key={tab}
+							className={filtro === tab.id ? "selected" : ""}
+							key={tab.id}
 							type="button"
-							onClick={() => setFiltro(tab)}
+							onClick={() => setFiltro(tab.id)}
 						>
-							{tab[0].toUpperCase() + tab.slice(1)}
+							{tab.label}
 						</button>
 					))}
 				</div>
@@ -213,7 +222,7 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 							<span>{formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}<small>Vence {formatDate(factura.fecha_vencimiento)}</small></span>
 							<strong>{formatMoney(factura.total)}<small>Saldo: {formatMoney(factura.saldo)}</small></strong>
 							<span className={`invoice-status ${estado.className}`}>{estado.label}</span>
-							<span>{facturaPendiente(factura) && <button className="pay-button" type="button" onClick={() => { setFacturaSeleccionada(factura.id_factura); setCurrentView("pago"); }}>Ver pago</button>}</span>
+							<span>{facturaPendiente(factura) && <button className="pay-button" type="button" onClick={() => { setFacturaSeleccionada(factura.id_factura); setCurrentView("pago"); }}>Pagar</button>}</span>
 						</div>
 					);
 				})}
@@ -222,7 +231,28 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 	);
 }
 
-function PaymentView({ factura }) {
+function PaymentView({ factura, onPay }) {
+	const [metodo, setMetodo] = useState("TARJETA");
+	const [mensaje, setMensaje] = useState("");
+	const [error, setError] = useState("");
+	const [pagando, setPagando] = useState(false);
+
+	const simularPago = async (event) => {
+		event.preventDefault();
+		setError("");
+		setMensaje("");
+		setPagando(true);
+		try {
+			const result = await onPay({ id_factura: factura.id_factura, medio: metodo });
+			setMensaje(`¡Pago simulado registrado! La factura ${result.factura.numero} quedó pagada.`);
+			window.alert(`¡Pago simulado realizado! La factura ${result.factura.numero} quedó pagada y el cambio se guardó en el sistema. No se hizo ningún cobro real.`);
+		} catch (paymentError) {
+			setError(paymentError.message);
+		} finally {
+			setPagando(false);
+		}
+	};
+
 	return (
 		<>
 			<ClientHeader title="Pagar Factura" subtitle="Consulta el saldo pendiente asociado a tu factura" />
@@ -235,15 +265,27 @@ function PaymentView({ factura }) {
 							<div><small>Factura #{factura.numero}</small><strong>Período {formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}</strong><span>Vence {formatDate(factura.fecha_vencimiento)}</span></div>
 							<b>{formatMoney(factura.saldo)}<small>Saldo pendiente · COP</small></b>
 						</div>
-						<div className="dashboard-card payment-card">
-							<h3>Detalle de la factura</h3>
+						<form className="dashboard-card payment-card" onSubmit={simularPago}>
+							<h3>Pago de demostración</h3>
 							<div className="payment-summary">
 								<Info label="Valor total" value={formatMoney(factura.total)} />
 								<Info label="Pagos registrados" value={formatMoney(factura.total_pagado)} />
 								<Info label="Saldo pendiente" value={formatMoney(factura.saldo)} />
 							</div>
-							<p className="helper-text">El pago en línea todavía no está habilitado. Esta vista consulta el saldo real, pero no registra cargos ni modifica la factura.</p>
-						</div>
+							<label className="simulation-label" htmlFor="payment-method">Método de pago
+								<select id="payment-method" value={metodo} onChange={(event) => setMetodo(event.target.value)}>
+									<option value="TARJETA">Tarjeta</option>
+									<option value="PSE">PSE</option>
+									<option value="TRANSFERENCIA">Transferencia</option>
+								</select>
+							</label>
+							<p className="helper-text">Pago de demostración: no se solicitan datos bancarios. El pago se registra como simulado y actualiza el estado de la factura.</p>
+							{error && <p className="form-feedback error" role="alert">{error}</p>}
+							{mensaje && <p className="simulation-feedback" role="status">{mensaje}</p>}
+							<button className="submit-button" type="submit" disabled={pagando || !facturaPendiente(factura)}>
+								{pagando ? "Registrando pago..." : facturaPendiente(factura) ? `Pagar ${formatMoney(factura.saldo)}` : "Factura pagada"}
+							</button>
+						</form>
 					</>
 				)}
 			</section>
@@ -342,7 +384,18 @@ function CertificateView({ perfil, contrato, resumen }) {
 						<Info label="Saldo pendiente" value={formatMoney(resumen.pendiente)} />
 					</div>
 					{resumen.paz_y_salvo ? (
-						<p>Según las facturas registradas, no tienes saldos pendientes a la fecha de consulta ({formatDate(new Date().toISOString().slice(0, 10))}).</p>
+						<>
+							<p>Según las facturas registradas, no tienes saldos pendientes a la fecha de consulta ({formatDate(new Date().toISOString().slice(0, 10))}).</p>
+							<div className="certificate-actions">
+								<button
+									className="submit-button"
+									type="button"
+									onClick={() => window.alert("¡Paz y salvo generado! Esta es una simulación y no crea ni descarga un certificado oficial.")}
+								>
+									Generar paz y salvo (simulación)
+								</button>
+							</div>
+						</>
 					) : (
 						<p className="form-feedback error">No es posible emitir un paz y salvo: tienes facturas pendientes por {formatMoney(resumen.pendiente)}.</p>
 					)}
@@ -366,7 +419,7 @@ function ClientPortal() {
 		() => location.state?.welcome ? "¡Bienvenido de nuevo a Global Conexit!" : ""
 	);
 	const facturaPendienteSeleccionada = useMemo(
-		() => portal?.facturas.find((factura) => String(factura.id_factura) === String(facturaSeleccionada) && facturaPendiente(factura))
+		() => portal?.facturas.find((factura) => String(factura.id_factura) === String(facturaSeleccionada))
 			|| portal?.facturas.find(facturaPendiente)
 			|| null,
 		[portal, facturaSeleccionada]
@@ -394,6 +447,33 @@ function ClientPortal() {
 		return result;
 	};
 
+	const handlePayment = async (payment) => {
+		const result = await pagarFacturaSimulada(payment);
+		setPortal((current) => {
+			const facturas = current.facturas.map((factura) => (
+				String(factura.id_factura) === String(result.factura.id_factura)
+					? { ...factura, ...result.factura, total_pagado: Number(factura.total_pagado) + Number(result.pago.valor) }
+					: factura
+			));
+			const resumen = facturas.reduce((totals, factura) => {
+				if (factura.estado !== "ANULADA") {
+					totals.pendiente += Number(factura.saldo);
+					totals.pagado += Number(factura.total_pagado);
+				}
+				return totals;
+			}, { pendiente: 0, pagado: 0 });
+			return {
+				...current,
+				facturas,
+				resumen: {
+					...resumen,
+					paz_y_salvo: current.contrato !== null && resumen.pendiente <= 0,
+				},
+			};
+		});
+		return result;
+	};
+
 	if (loading) {
 		return <main className="client-main"><p role="status">Cargando información de tu cuenta...</p></main>;
 	}
@@ -406,7 +486,7 @@ function ClientPortal() {
 		plan: <PlanView contrato={portal.contrato} />,
 		cuenta: <ProfileView perfil={perfil} />,
 		facturas: <InvoicesView facturas={portal.facturas} resumen={portal.resumen} setFacturaSeleccionada={setFacturaSeleccionada} setCurrentView={setCurrentView} />,
-		pago: <PaymentView factura={facturaPendienteSeleccionada} />,
+		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} />,
 		paz: <CertificateView perfil={perfil} contrato={portal.contrato} resumen={portal.resumen} />,
 		soporte: <SupportView perfil={perfil} tickets={portal.tickets} onReport={handleReport} />,
 	};

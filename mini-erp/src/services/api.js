@@ -30,6 +30,10 @@ export function obtenerPortalCliente() {
   return request("clientes/portal.php");
 }
 
+export function pagarFacturaSimulada(pago) {
+  return request("clientes/pagar_simulado.php", { method: "POST", body: pago });
+}
+
 export function reportarFallaCliente(reporte) {
   return request("clientes/reportar.php", { method: "POST", body: reporte });
 }
