@@ -1263,6 +1263,22 @@ main > * {
   flex: 0 0 auto;
 }
 
+.plan-summary > div:nth-child(-n+2) { display: block; }
+.plan-summary .plan-address { grid-column: 1 / -1; }
+.no-contract-notice { width: min(720px, calc(100% - 44px)); margin-top: 22px !important; }
+.no-contract-notice strong { color: #9e4e0b; }
+.no-contract-notice p { margin: 8px 0 0; color: var(--client-muted); }
+.invoice-empty { margin: 0; padding: 22px; color: var(--client-muted); }
+.payment-summary { display: grid; gap: 10px; margin-top: 16px; }
+.payment-summary > div { display: flex; justify-content: space-between; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--client-line); }
+.payment-summary small { color: var(--client-muted); }
+.payment-summary strong { text-align: right; }
+.form-feedback { margin: 12px 0 0; color: #15803d; font-size: 13px; }
+.form-feedback.error { color: #b43c27; }
+.submit-button:disabled { cursor: wait; opacity: .65; }
+.support-form select { min-height: 43px; }
+.tickets article > span { text-transform: capitalize; }
+
 .portal-card button {
   padding: 0;
   border: 0;

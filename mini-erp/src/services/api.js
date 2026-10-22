@@ -26,6 +26,14 @@ export function obtenerPerfilCliente() {
   return request("clientes/perfil.php");
 }
 
+export function obtenerPortalCliente() {
+  return request("clientes/portal.php");
+}
+
+export function reportarFallaCliente(reporte) {
+  return request("clientes/reportar.php", { method: "POST", body: reporte });
+}
+
 export function cerrarSesionCliente() {
   return request("clientes/logout.php", { method: "POST" });
 }
