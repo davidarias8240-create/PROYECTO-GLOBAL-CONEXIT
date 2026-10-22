@@ -27,18 +27,21 @@ try {
            AND r.estado = 'ACTIVO'
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'usuarios'
-                  AND b.id_registro = CAST(u.id_usuario AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'usuarios' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(u.id_usuario AS CHAR) COLLATE utf8mb4_unicode_ci
            )
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'clientes'
-                  AND b.id_registro = CAST(c.id_cliente AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'clientes' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(c.id_cliente AS CHAR) COLLATE utf8mb4_unicode_ci
            )
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'roles'
-                  AND b.id_registro = CAST(r.id_rol AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'roles' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(r.id_rol AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LIMIT 1"
     );
@@ -69,8 +72,9 @@ try {
          WHERE c.id_cliente = :id_cliente
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'contratos'
-                  AND b.id_registro = CAST(c.id_contrato AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'contratos' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(c.id_contrato AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          ORDER BY CASE
                 WHEN c.estado = 'ACTIVO' THEN 0
@@ -104,11 +108,11 @@ try {
          INNER JOIN contrato c ON c.id_contrato = f.id_contrato
          INNER JOIN periodo_facturacion pf ON pf.id_periodo = f.id_periodo
          WHERE c.id_cliente = :id_cliente
-           AND f.estado <> 'ANULADA'
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'facturas'
-                  AND b.id_registro = CAST(f.id_factura AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'facturas' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(f.id_factura AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          ORDER BY f.fecha_emision DESC, f.id_factura DESC"
     );
@@ -122,8 +126,9 @@ try {
          WHERE t.id_cliente = :id_cliente
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'tickets'
-                  AND b.id_registro = CAST(t.id_ticket AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(t.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          ORDER BY t.fecha_creacion DESC, t.id_ticket DESC"
     );
@@ -133,8 +138,10 @@ try {
     $pendiente = 0.0;
     $pagado = 0.0;
     foreach ($facturas as $factura) {
-        $pendiente += (float) $factura["saldo"];
-        $pagado += (float) $factura["total_pagado"];
+        if ($factura["estado"] !== "ANULADA") {
+            $pendiente += (float) $factura["saldo"];
+            $pagado += (float) $factura["total_pagado"];
+        }
     }
 
     echo json_encode([

@@ -48,18 +48,21 @@ try {
            AND r.estado = 'ACTIVO'
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'usuarios'
-                  AND b.id_registro = CAST(u.id_usuario AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'usuarios' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(u.id_usuario AS CHAR) COLLATE utf8mb4_unicode_ci
            )
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'clientes'
-                  AND b.id_registro = CAST(c.id_cliente AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'clientes' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(c.id_cliente AS CHAR) COLLATE utf8mb4_unicode_ci
            )
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
-                WHERE b.entidad = 'roles'
-                  AND b.id_registro = CAST(r.id_rol AS CHAR)
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'roles' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(r.id_rol AS CHAR) COLLATE utf8mb4_unicode_ci
            )
          LIMIT 1"
     );

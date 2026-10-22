@@ -20,6 +20,8 @@ const customerFields = [
   { name: "telefono", label: "Teléfono", maxLength: 30 },
 ];
 
+// El formulario de usuarios reutiliza estos campos cuando se selecciona el rol CLIENTE.
+
 function humanize(name) {
   return name
     .replace(/^id_/, "ID ")
@@ -53,10 +55,10 @@ function defaultFieldValue(column) {
   return String(column.default);
 }
 
-function EntityField({ column, value, onChange, disabled = false }) {
+function EntityField({ column, value, onChange, disabled = false, requiredOverride }) {
   const [relationSearch, setRelationSearch] = useState("");
   const label = humanize(column.name);
-  const required = !column.nullable && column.default === null && !column.generated;
+  const required = requiredOverride ?? (!column.nullable && column.default === null && !column.generated);
   const isBoolean = column.type === "tinyint" && column.columnType.includes("(1)");
 
   if (isBoolean) {
@@ -302,6 +304,10 @@ function EntityAdmin({ entity }) {
     try {
       const payload = { datos };
       if (entity === "usuarios" && password) payload.contrasena = password;
+      if (entity === "clientes" && !editingId) {
+        if (password.length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
+        payload.contrasena = password;
+      }
       if (entity === "usuarios" && !editingId) {
         if (password.length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
         if (isClientRole) {
@@ -604,7 +610,7 @@ function EntityAdmin({ entity }) {
         </div>
         {!metadata?.soloLectura && (
           <button type="button" className="btn btn-success" onClick={startCreate}>
-            + Crear {entity === "usuarios" ? "usuario" : "registro"}
+            + Crear {entity === "usuarios" ? "usuario" : entity === "clientes" ? "cliente" : "registro"}
           </button>
         )}
       </div>
@@ -618,9 +624,15 @@ function EntityAdmin({ entity }) {
       {showForm && (
         <form className="dashboard-card admin-entity-form mb-4" onSubmit={handleSave}>
           <div className="d-flex justify-content-between align-items-center gap-2 mb-3">
-            <h3 className="h5 mb-0">{editingId ? "Editar registro" : "Crear registro"}</h3>
+            <h3 className="h5 mb-0">
+              {editingId ? "Editar registro" : `Crear ${entity === "clientes" ? "cliente" : entity === "usuarios" ? "usuario" : "registro"}`}
+            </h3>
             <button type="button" className="btn-close" aria-label="Cerrar" onClick={closeForm} />
           </div>
+          {entity === "clientes" && !editingId && (
+            /* El backend crea la cuenta vinculada con rol CLIENTE usando el correo y la contraseña ingresados. */
+            <p className="text-muted">Se creará una cuenta de usuario activa con el rol CLIENTE y los datos de acceso indicados abajo.</p>
+          )}
           <div className="admin-entity-fields">
             {formColumns.map((column) => (
               <EntityField
@@ -628,11 +640,15 @@ function EntityAdmin({ entity }) {
                 column={column}
                 value={values[column.name] ?? ""}
                 onChange={(value) => setValues((current) => ({ ...current, [column.name]: value }))}
+                requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
               />
             ))}
-            {entity === "usuarios" && (
+            {(entity === "usuarios" || (entity === "clientes" && !editingId)) && (
               <label className="admin-entity-field">
-                <span>{editingId ? "Nueva contraseña (opcional, mínimo 8 caracteres)" : "Contraseña (mínimo 8 caracteres)"}{editingId ? "" : " *"}</span>
+                <span>
+                  {editingId ? "Nueva contraseña (opcional, mínimo 8 caracteres)" : "Contraseña (mínimo 8 caracteres)"}
+                  {editingId ? "" : " *"}
+                </span>
                 <input
                   className="form-control"
                   type="password"
@@ -645,7 +661,7 @@ function EntityAdmin({ entity }) {
               </label>
             )}
           </div>
-          {isClientRole && !editingId && (
+          {entity === "usuarios" && isClientRole && !editingId && (
             <>
               <h4 className="h6 mt-4">Datos del perfil cliente</h4>
               <div className="admin-entity-fields">
