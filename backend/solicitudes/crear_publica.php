@@ -17,6 +17,12 @@ foreach ($requiredFields as $field) {
     }
 }
 
+if (($data["autorizacion_tratamiento"] ?? false) !== true) {
+    http_response_code(400);
+    echo json_encode(["error" => "Debes autorizar el tratamiento de tus datos personales"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (!filter_var($data["email"], FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
     echo json_encode(["error" => "El correo no es válido"], JSON_UNESCAPED_UNICODE);
@@ -25,7 +31,7 @@ if (!filter_var($data["email"], FILTER_VALIDATE_EMAIL)) {
 
 try {
     $message = sprintf(
-        "Solicitud para el plan %s. Documento: %s. Dirección de instalación: %s.",
+        "Solicitud para el plan %s. Documento: %s. Dirección de instalación: %s. El titular autorizó el tratamiento de sus datos personales conforme a la Ley 1581 de 2012.",
         trim($data["plan"]),
         trim($data["documento"]),
         trim($data["direccion"])
