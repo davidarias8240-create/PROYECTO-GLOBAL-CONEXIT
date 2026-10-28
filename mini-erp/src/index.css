@@ -60,7 +60,7 @@ textarea {
   min-height: 100vh;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   padding: 48px clamp(24px, 11vw, 180px);
   position: relative;
   overflow: hidden;
