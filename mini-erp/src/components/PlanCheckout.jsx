@@ -38,7 +38,7 @@ function PlanCheckout({ plan, onClose }) {
 			<section className="plan-checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
 				<header className="plan-checkout-header">
 					<div>
-						<h2 id="checkout-title">{step === "details" ? `Contratar ${plan.name}` : "Solicitud enviada"}</h2>
+						<h2 id="checkout-title">{step === "details" ? `Contizar ${plan.name}` : "Solicitud enviada"}</h2>
 						{step === "details" && <p>{plan.price}<span> /mes</span></p>}
 					</div>
 					<button className="plan-checkout-close" type="button" onClick={onClose} aria-label="Cerrar">×</button>

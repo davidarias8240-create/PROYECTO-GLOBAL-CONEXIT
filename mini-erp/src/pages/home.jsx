@@ -263,7 +263,7 @@ function Home() {
 						{plansState.status === "loading" && <p className="plans-message" role="status">Cargando planes...</p>}
 						{plansState.status === "empty" && <p className="plans-message">En este momento no hay planes disponibles.</p>}
 						{plansState.status === "error" && <div className="plans-message" role="alert"><p>{plansState.error}</p><button className="primary-button plans-retry" type="button" onClick={() => { setPlansState({ status: "loading", items: [], error: "" }); setPlansReload((attempt) => attempt + 1); }}>Reintentar</button></div>}
-						{plansState.items.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.id}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><button className="primary-button" type="button" onClick={() => setSelectedPlan(plan)}>Contratar ahora →</button></article>)}
+						{plansState.items.map((plan) => <article className={`plan${plan.featured ? " featured" : ""}`} key={plan.id}>{plan.featured && <span className="popular">⚡ MÁS POPULAR</span>}<h3>{plan.name}</h3><div className="speed"><span>↓ {plan.down}</span><span>↑ {plan.up}</span></div><p className="price">{plan.price}<small>/mes</small></p><ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul><button className="primary-button" type="button" onClick={() => setSelectedPlan(plan)}>Cotizar ahora →</button></article>)}
 					</div>
 				</section>
 
