@@ -94,7 +94,7 @@ function Sidebar() {
         },
     ].filter(({ entities }) => entities.length > 0);
     const activeGroup = groups.find(({ entities }) =>
-        entities.some(({ key }) => pathname === `/${key}`),
+        entities.some(({ key }) => pathname === `/${key}` || pathname.startsWith(`/${key}/`)),
     )?.label;
     const [groupSelection, setGroupSelection] = useState(null);
     const expandedGroup = groupSelection?.pathname === pathname
