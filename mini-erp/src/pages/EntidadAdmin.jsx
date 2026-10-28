@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
@@ -152,7 +153,8 @@ function EntityField({ column, value, onChange, disabled = false, requiredOverri
   );
 }
 
-function EntityAdmin({ entity }) {
+function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
+  const contextReadOnly = Boolean(customerId && ["planes", "periodos"].includes(entity));
   const [metadata, setMetadata] = useState(null);
   const [rows, setRows] = useState([]);
   const [values, setValues] = useState({});
@@ -167,32 +169,50 @@ function EntityAdmin({ entity }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const requestSequence = useRef(0);
+  const lastClientSearch = useRef("");
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (clientSearch = "") => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     setError("");
     try {
       const [meta, records] = await Promise.all([
-        obtenerMetadatosEntidad(entity),
-        obtenerRegistrosEntidad(entity),
+        obtenerMetadatosEntidad(entity, customerId),
+        obtenerRegistrosEntidad(entity, false, customerId, clientSearch),
       ]);
-      setMetadata(meta);
-      setRows(records.registros);
+      if (requestId === requestSequence.current) {
+        setMetadata(meta);
+        setRows(records.registros);
+      }
     } catch (loadError) {
-      setError(loadError.message);
+      if (requestId === requestSequence.current) setError(loadError.message);
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
-  }, [entity]);
+  }, [customerId, entity]);
 
   useEffect(() => {
+    lastClientSearch.current = "";
     setMetadata(null);
     setRows([]);
     setShowForm(false);
     setSelectedCustomer(null);
     setLoadingCustomerDetail(false);
+    setSearch("");
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (entity !== "clientes") return undefined;
+    const query = search.trim();
+    if (!query && !lastClientSearch.current) return undefined;
+    const timeout = window.setTimeout(() => {
+      lastClientSearch.current = query;
+      loadData(query);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [entity, loadData, search]);
 
   const visibleColumns = useMemo(
     () => (metadata?.columnas || []).filter((column) =>
@@ -228,6 +248,7 @@ function EntityAdmin({ entity }) {
   }, [entity, metadata, values.id_rol]);
 
   const visibleRows = useMemo(() => {
+    if (entity === "clientes" && search.trim()) return rows;
     const query = search.trim().toLocaleLowerCase("es");
     if (!query) return rows;
     return rows.filter((row) =>
@@ -235,7 +256,7 @@ function EntityAdmin({ entity }) {
         String(value ?? "").toLocaleLowerCase("es").includes(query)
       )
     );
-  }, [rows, search]);
+  }, [entity, rows, search]);
 
   const closeForm = () => {
     setShowForm(false);
@@ -265,10 +286,17 @@ function EntityAdmin({ entity }) {
 
   const startCreate = () => {
     setNotice("");
-    setValues(Object.fromEntries(formColumns.map((column) => [
+    const initialValues = Object.fromEntries(formColumns.map((column) => [
       column.name,
       defaultFieldValue(column),
-    ])));
+    ]));
+    if (customerId && Object.hasOwn(initialValues, "id_cliente")) {
+      initialValues.id_cliente = customerId;
+    }
+    if (entity === "notificaciones" && customerUserId && Object.hasOwn(initialValues, "id_usuario")) {
+      initialValues.id_usuario = customerUserId;
+    }
+    setValues(initialValues);
     setCustomer({});
     setPassword("");
     setEditingId(null);
@@ -320,10 +348,10 @@ function EntityAdmin({ entity }) {
         }
       }
 
-      await guardarRegistroEntidad(entity, payload, editingId);
+      await guardarRegistroEntidad(entity, payload, editingId, customerId);
       closeForm();
       setNotice(editingId ? "Cambios guardados." : "Registro creado.");
-      await loadData();
+      await loadData(entity === "clientes" ? search.trim() : "");
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -338,9 +366,9 @@ function EntityAdmin({ entity }) {
     setError("");
     setNotice("");
     try {
-      await desactivarRegistroEntidad(entity, id);
+      await desactivarRegistroEntidad(entity, id, customerId);
       setNotice("Registro desactivado. Puedes reactivarlo desde Desactivados.");
-      await loadData();
+      await loadData(entity === "clientes" ? search.trim() : "");
     } catch (archiveError) {
       setError(archiveError.message);
     }
@@ -403,7 +431,12 @@ function EntityAdmin({ entity }) {
               <h3 className="h5 mb-1">Detalle del cliente</h3>
               <div className="text-muted">{cliente.nombres} · {cliente.numero_cliente}</div>
             </div>
-            <button type="button" className="btn btn-outline-secondary btn-sm" onClick={closeCustomerDetail}>Cerrar</button>
+            <div className="d-flex gap-2">
+              <Link className="btn btn-info btn-sm text-white" to={`/clientes/${cliente.id_cliente}`}>
+                Abrir ficha por módulos
+              </Link>
+              <button type="button" className="btn btn-outline-secondary btn-sm" onClick={closeCustomerDetail}>Cerrar</button>
+            </div>
           </div>
 
           <div className="row g-3 mb-4">
@@ -608,7 +641,7 @@ function EntityAdmin({ entity }) {
           <h2 className="mb-1">{metadata?.titulo || "Registros"}</h2>
           <p className="text-muted mb-0">Datos consultados desde la base de datos del sistema.</p>
         </div>
-        {!metadata?.soloLectura && (
+        {!metadata?.soloLectura && !contextReadOnly && (
           <button type="button" className="btn btn-success" onClick={startCreate}>
             + Crear {entity === "usuarios" ? "usuario" : entity === "clientes" ? "cliente" : "registro"}
           </button>
@@ -617,6 +650,15 @@ function EntityAdmin({ entity }) {
 
       {notice && <p className="alert alert-success" role="status">{notice}</p>}
       {error && <p className="alert alert-danger" role="alert">{error}</p>}
+
+      {customerId && (
+        <div className="d-flex align-items-center gap-2 mb-3">
+          <Link className="btn btn-outline-secondary btn-sm" to={`/clientes/${customerId}`}>
+            Volver al cliente
+          </Link>
+          <span className="text-muted">Mostrando solo registros relacionados con este cliente.</span>
+        </div>
+      )}
 
       {entity === "clientes" && selectedCustomer && renderCustomerDetail()}
       {entity === "clientes" && loadingCustomerDetail && <p className="alert alert-info">Cargando detalle del cliente...</p>}
@@ -640,6 +682,11 @@ function EntityAdmin({ entity }) {
                 column={column}
                 value={values[column.name] ?? ""}
                 onChange={(value) => setValues((current) => ({ ...current, [column.name]: value }))}
+                disabled={Boolean(
+                  customerId
+                  && (column.name === "id_cliente"
+                    || (entity === "notificaciones" && column.name === "id_usuario"))
+                )}
                 requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
               />
             ))}
@@ -707,7 +754,9 @@ function EntityAdmin({ entity }) {
           <input
             className="form-control"
             type="search"
-            placeholder="Buscar..."
+            placeholder={entity === "clientes"
+              ? "Buscar por nombre, documento, número, teléfono, correo o dirección..."
+              : "Buscar..."}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -720,14 +769,14 @@ function EntityAdmin({ entity }) {
           <thead className="table-dark">
             <tr>
               {tableColumns.map((column) => <th key={column.name}>{humanize(column.name.replace(/^id_/, ""))}</th>)}
-              {!metadata?.soloLectura && <th>Acciones</th>}
+              {!metadata?.soloLectura && !contextReadOnly && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={tableColumns.length + (metadata?.soloLectura ? 0 : 1)} className="text-center text-muted">
-                  No hay registros para mostrar.
+                <td colSpan={tableColumns.length + (metadata?.soloLectura || contextReadOnly ? 0 : 1)} className="text-center text-muted">
+                  {customerId ? "Este cliente no tiene registros en esta sección." : "No hay registros para mostrar."}
                 </td>
               </tr>
             ) : visibleRows.map((row) => (
@@ -739,20 +788,29 @@ function EntityAdmin({ entity }) {
                 {tableColumns.map((column) => (
                   <td key={column.name}>{renderCell(column, row)}</td>
                 ))}
-                {!metadata.soloLectura && (
+                {!metadata.soloLectura && !contextReadOnly && (
                   <td>
-                    <div className="d-flex gap-2 flex-wrap">
+                    <div className="d-flex justify-content-center align-items-center gap-2 flex-wrap">
                       {entity === "clientes" && (
-                        <button
-                          type="button"
-                          className="btn btn-info btn-sm text-white"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openCustomerDetail(row);
-                          }}
-                        >
-                          Ver detalle
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-info btn-sm text-white"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openCustomerDetail(row);
+                            }}
+                          >
+                            Ver detalle
+                          </button>
+                          <Link
+                            className="btn btn-outline-info btn-sm"
+                            to={`/clientes/${row[metadata.clave]}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            Gestionar
+                          </Link>
+                        </>
                       )}
                       <button type="button" className="btn btn-warning btn-sm" onClick={(event) => {
                         event.stopPropagation();

@@ -58,17 +58,28 @@ export function obtenerNotificacionesAuditoria() {
   return request("auditoria/notificaciones.php");
 }
 
+function entityQuery({ customerId, search, archived = false } = {}) {
+  const query = new URLSearchParams();
+  if (archived) query.set("archivados", "1");
+  if (customerId !== null && customerId !== undefined) query.set("id_cliente", customerId);
+  if (search) query.set("buscar", search);
+  const value = query.toString();
+  return value ? `?${value}` : "";
+}
+
 async function solicitarEntidad(entity, file, options) {
   return request(`${entity}/${file}${options?.query || ""}`, options);
 }
 
-export function obtenerMetadatosEntidad(entity) {
-  return solicitarEntidad(entity, "metadata.php");
+export function obtenerMetadatosEntidad(entity, customerId = null) {
+  return solicitarEntidad(entity, "metadata.php", {
+    query: entityQuery({ customerId }),
+  });
 }
 
-export function obtenerRegistrosEntidad(entity, archivados = false) {
+export function obtenerRegistrosEntidad(entity, archivados = false, customerId = null, search = "") {
   return solicitarEntidad(entity, "listar.php", {
-    query: archivados ? "?archivados=1" : "",
+    query: entityQuery({ archived: archivados, customerId, search }),
   });
 }
 
@@ -80,23 +91,27 @@ export function obtenerPlanesPublicos() {
   return request("planes/publicos.php", { credentials: "omit" });
 }
 
-export function guardarRegistroEntidad(entity, data, id = null) {
+export function guardarRegistroEntidad(entity, data, id = null, customerId = null) {
+  const query = entityQuery({ customerId });
   if (id === null) {
     return solicitarEntidad(entity, "crear.php", {
       method: "POST",
       body: data,
+      query,
     });
   }
   return solicitarEntidad(entity, "editar.php", {
     method: "POST",
     body: { id, ...data },
+    query,
   });
 }
 
-export function desactivarRegistroEntidad(entity, id) {
+export function desactivarRegistroEntidad(entity, id, customerId = null) {
   return solicitarEntidad(entity, "eliminar.php", {
     method: "POST",
     body: { id },
+    query: entityQuery({ customerId }),
   });
 }
 

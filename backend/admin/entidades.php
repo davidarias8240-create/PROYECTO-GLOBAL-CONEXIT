@@ -33,12 +33,113 @@ $tabla = $definicion["tabla"];
 $clave = $definicion["clave"];
 $baseDatos = "global_conexit";
 $metadatos = [];
+$idClienteContexto = null;
+
+if (array_key_exists("id_cliente", $_GET)) {
+    $idClienteContexto = filter_var($_GET["id_cliente"], FILTER_VALIDATE_INT);
+    if ($idClienteContexto === false || $idClienteContexto === null || $idClienteContexto <= 0) {
+        responder(["error" => "Debe indicar un cliente válido"], 400);
+    }
+    if (filtroClienteEntidad($entidad) === null) {
+        responder(["error" => "Este módulo no tiene una relación de cliente disponible"], 400);
+    }
+    $clienteExiste = $pdo->prepare("SELECT 1 FROM cliente WHERE id_cliente = :id_cliente");
+    $clienteExiste->execute([":id_cliente" => $idClienteContexto]);
+    if (!$clienteExiste->fetchColumn()) {
+        responder(["error" => "No se encontró el cliente solicitado"], 404);
+    }
+}
 
 function responder(array $data, int $status = 200): never
 {
     http_response_code($status);
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
+}
+
+function filtroClienteEntidad(string $entidad): ?string
+{
+    return match ($entidad) {
+        "direcciones", "solicitudes", "tickets" => "t.id_cliente = :cliente_contexto",
+        "contratos" => "t.id_cliente = :cliente_contexto AND EXISTS (
+            SELECT 1 FROM direccion d
+            WHERE d.id_direccion = t.id_direccion
+              AND d.id_cliente = :cliente_contexto_direccion
+        )",
+        "interacciones" => "EXISTS (
+            SELECT 1 FROM ticket tc
+            WHERE tc.id_ticket = t.id_ticket AND tc.id_cliente = :cliente_contexto
+        )",
+        "ordenes" => "EXISTS (
+            SELECT 1
+            FROM contrato co
+            INNER JOIN direccion d ON d.id_direccion = t.id_direccion
+            WHERE co.id_contrato = t.id_contrato
+              AND co.id_cliente = :cliente_contexto
+              AND d.id_cliente = :cliente_contexto_direccion
+        )",
+        "notificaciones" => "EXISTS (
+            SELECT 1
+            FROM cliente c
+            INNER JOIN usuario u ON u.id_usuario = c.id_usuario
+            WHERE c.id_cliente = :cliente_contexto
+              AND u.id_usuario = t.id_usuario
+        )",
+        "facturas" => "EXISTS (
+            SELECT 1 FROM contrato co
+            WHERE co.id_contrato = t.id_contrato AND co.id_cliente = :cliente_contexto
+        )",
+        "pagos", "ajustes" => "EXISTS (
+            SELECT 1
+            FROM factura f
+            INNER JOIN contrato co ON co.id_contrato = f.id_contrato
+            WHERE f.id_factura = t.id_factura AND co.id_cliente = :cliente_contexto
+        )",
+        "periodos" => "EXISTS (
+            SELECT 1
+            FROM factura f
+            INNER JOIN contrato co ON co.id_contrato = f.id_contrato
+            WHERE f.id_periodo = t.id_periodo AND co.id_cliente = :cliente_contexto
+        )",
+        "planes" => "EXISTS (
+            SELECT 1 FROM contrato co
+            WHERE co.id_plan = t.id_plan AND co.id_cliente = :cliente_contexto
+        )",
+        default => null
+    };
+}
+
+function parametrosFiltroCliente(string $entidad, int $idCliente): array
+{
+    $params = [":cliente_contexto" => $idCliente];
+    if (in_array($entidad, ["contratos", "ordenes"], true)) {
+        $params[":cliente_contexto_direccion"] = $idCliente;
+    }
+    return $params;
+}
+
+function registroPerteneceACliente(
+    PDO $pdo,
+    string $entidad,
+    string $tabla,
+    string $clave,
+    string $idRegistro,
+    int $idCliente
+): bool {
+    $filtro = filtroClienteEntidad($entidad);
+    if ($filtro === null) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM `{$tabla}` t
+         WHERE t.`{$clave}` = :id_registro AND ({$filtro}) LIMIT 1"
+    );
+    $stmt->execute(array_merge(
+        [":id_registro" => $idRegistro],
+        parametrosFiltroCliente($entidad, $idCliente)
+    ));
+    return (bool) $stmt->fetchColumn();
 }
 
 function auditar(PDO $pdo, string $entidad, string $id, string $accion, ?array $detalle = null): void
@@ -134,7 +235,14 @@ function obtenerMetadatos(PDO $pdo, string $baseDatos, string $tabla, string $cl
     return ["columns" => $meta, "primaryKey" => $clave, "relations" => $relations];
 }
 
-function obtenerOpcionesRelacion(PDO $pdo, array $configuracion, string $tabla, string $columnaClave): array
+function obtenerOpcionesRelacion(
+    PDO $pdo,
+    array $configuracion,
+    string $tabla,
+    string $columnaClave,
+    ?string $entidadContexto = null,
+    ?int $idClienteContexto = null
+): array
 {
     $labelCandidates = match ($tabla) {
         "usuario" => ["correo"],
@@ -199,6 +307,46 @@ function obtenerOpcionesRelacion(PDO $pdo, array $configuracion, string $tabla, 
         }
         $options[] = ["value" => $row["id"], "label" => implode(" · ", $labels)];
     }
+
+    if ($idClienteContexto !== null) {
+        $allowedIds = null;
+        if ($tabla === "cliente") {
+            $allowedIds = [(string) $idClienteContexto];
+        } elseif ($tabla === "usuario" && $entidadContexto === "notificaciones") {
+            $user = $pdo->prepare("SELECT id_usuario FROM cliente WHERE id_cliente = :id_cliente");
+            $user->execute([":id_cliente" => $idClienteContexto]);
+            $userId = $user->fetchColumn();
+            $allowedIds = $userId === false || $userId === null ? [] : [(string) $userId];
+        } else {
+            $relationEntity = match ($tabla) {
+                "direccion" => "direcciones",
+                "contrato" => "contratos",
+                "ticket" => "tickets",
+                "factura" => "facturas",
+                default => null
+            };
+            $relationDefinition = $relationEntity === null ? null : ($configuracion[$relationEntity] ?? null);
+            $relationFilter = $relationEntity === null ? null : filtroClienteEntidad($relationEntity);
+            if ($relationDefinition !== null && $relationFilter !== null) {
+                $relationTable = $relationDefinition["tabla"];
+                $relationKey = $relationDefinition["clave"];
+                $relatedRows = $pdo->prepare(
+                    "SELECT t.`{$relationKey}` FROM `{$relationTable}` t WHERE {$relationFilter}"
+                );
+                $relatedRows->execute(parametrosFiltroCliente($relationEntity, $idClienteContexto));
+                $allowedIds = array_map("strval", $relatedRows->fetchAll(PDO::FETCH_COLUMN));
+            }
+        }
+
+        if ($allowedIds !== null) {
+            $allowedLookup = array_fill_keys($allowedIds, true);
+            $options = array_values(array_filter(
+                $options,
+                static fn(array $option): bool => isset($allowedLookup[(string) $option["value"]])
+            ));
+        }
+    }
+
     return $options;
 }
 
@@ -214,7 +362,9 @@ try {
                     $pdo,
                     $configuracion,
                     $relation["table"],
-                    $relation["column"]
+                    $relation["column"],
+                    $entidad,
+                    $idClienteContexto
                 );
             } else {
                 $column["options"] = [];
@@ -258,18 +408,57 @@ try {
                 AND b.id_registro COLLATE utf8mb4_unicode_ci =
                     CAST({$keySql} AS CHAR) COLLATE utf8mb4_unicode_ci";
         }
-        $sql .= " WHERE {$archiveFilter} ORDER BY {$keySql} ASC LIMIT 1000";
-        $stmt = $pdo->prepare($sql);
-        if ($definicion["archivable"]) {
-            $stmt->execute([":archive_entity" => $entidad]);
-        } else {
-            $stmt->execute();
+        $customerFilter = $idClienteContexto === null
+            ? ""
+            : " AND (" . filtroClienteEntidad($entidad) . ")";
+        $searchFilter = "";
+        $searchValue = $_GET["buscar"] ?? "";
+        if (!is_string($searchValue)) {
+            responder(["error" => "El criterio de búsqueda no es válido"], 400);
         }
+        $search = trim($searchValue);
+        $params = [];
+        if ($definicion["archivable"]) {
+            $params[":archive_entity"] = $entidad;
+        }
+        if ($idClienteContexto !== null) {
+            $params = array_merge($params, parametrosFiltroCliente($entidad, $idClienteContexto));
+        }
+        if ($entidad === "clientes" && $search !== "") {
+            $searchFilter = " AND (
+                CAST(t.id_cliente AS CHAR) LIKE :buscar_id
+                OR t.numero_cliente LIKE :buscar_numero
+                OR t.tipo_documento LIKE :buscar_tipo_documento
+                OR t.numero_documento LIKE :buscar_documento
+                OR t.nombres LIKE :buscar_nombre
+                OR t.telefono LIKE :buscar_telefono
+                OR t.correo LIKE :buscar_correo
+                OR EXISTS (
+                    SELECT 1 FROM direccion d
+                    WHERE d.id_cliente = t.id_cliente
+                      AND CONCAT_WS(' ', d.direccion, d.ciudad, d.departamento, d.referencia)
+                          LIKE :buscar_direccion
+                )
+            )";
+            $term = "%" . $search . "%";
+            foreach (["id", "numero", "tipo_documento", "documento", "nombre", "telefono", "correo", "direccion"] as $field) {
+                $params[":buscar_" . $field] = $term;
+            }
+        }
+        $listLimit = $idClienteContexto === null ? " LIMIT 1000" : "";
+        $sql .= " WHERE {$archiveFilter}{$customerFilter}{$searchFilter} ORDER BY {$keySql} ASC{$listLimit}";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($params);
         responder(["registros" => $stmt->fetchAll()]);
     }
 
     $data = json_decode(file_get_contents("php://input"), true);
     $id = is_array($data) && isset($data["id"]) ? trim((string) $data["id"]) : "";
+    if ($idClienteContexto !== null
+        && in_array($entidad, ["planes", "periodos"], true)
+        && $method === "POST") {
+        responder(["error" => "Este catálogo solo se puede consultar desde el detalle del cliente"], 405);
+    }
 
     if ($method === "POST" && $operacion === "crear") {
         if (!$definicion["editable"] || !is_array($data)) {
@@ -367,6 +556,11 @@ try {
             array_values($values)
         ));
         $newId = (string) $pdo->lastInsertId();
+        if ($idClienteContexto !== null
+            && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $newId, $idClienteContexto)) {
+            $pdo->rollBack();
+            responder(["error" => "El registro no quedó asociado al cliente seleccionado"], 409);
+        }
 
         if ($tabla === "cliente") {
             auditar($pdo, "usuario", (string) $values["id_usuario"], "CREAR", [
@@ -470,8 +664,11 @@ try {
         if (!$values) {
             responder(["error" => "No se recibieron cambios"], 400);
         }
+        $customerFilter = $idClienteContexto === null
+            ? ""
+            : " AND (" . filtroClienteEntidad($entidad) . ")";
         $exists = $pdo->prepare(
-            "SELECT 1 FROM `{$tabla}` t WHERE t.`{$clave}` = :id
+            "SELECT 1 FROM `{$tabla}` t WHERE t.`{$clave}` = :id{$customerFilter}
              AND NOT EXISTS (
                  SELECT 1 FROM admin_bajas b
                  WHERE b.entidad COLLATE utf8mb4_unicode_ci = :entity COLLATE utf8mb4_unicode_ci
@@ -479,7 +676,11 @@ try {
                        CAST(t.`{$clave}` AS CHAR) COLLATE utf8mb4_unicode_ci
              )"
         );
-        $exists->execute([":id" => $id, ":entity" => $entidad]);
+        $existsParams = [":id" => $id, ":entity" => $entidad];
+        if ($idClienteContexto !== null) {
+            $existsParams = array_merge($existsParams, parametrosFiltroCliente($entidad, $idClienteContexto));
+        }
+        $exists->execute($existsParams);
         if (!$exists->fetchColumn()) {
             responder(["error" => "No se encontró el registro activo"], 404);
         }
@@ -511,6 +712,11 @@ try {
             }
         }
         $stmt->execute($updateValues);
+        if ($idClienteContexto !== null
+            && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $id, $idClienteContexto)) {
+            $pdo->rollBack();
+            responder(["error" => "No puedes asociar el registro a otro cliente"], 409);
+        }
         unset($input["contrasena_hash"]);
         auditar($pdo, $tabla, $id, "EDITAR", $input);
         $pdo->commit();
@@ -542,8 +748,15 @@ try {
         if ($operacion === "eliminar") {
             $hasState = in_array("estado", array_column($metadata["columns"], "name"), true);
             $stateSelect = $hasState ? "`estado`" : "'' AS estado";
-            $stmt = $pdo->prepare("SELECT {$stateSelect} FROM `{$tabla}` WHERE `{$clave}` = :id LIMIT 1");
-            $stmt->execute([":id" => $id]);
+            $customerFilter = $idClienteContexto === null
+                ? ""
+                : " AND (" . filtroClienteEntidad($entidad) . ")";
+            $stmt = $pdo->prepare("SELECT {$stateSelect} FROM `{$tabla}` t WHERE t.`{$clave}` = :id{$customerFilter} LIMIT 1");
+            $archiveParams = [":id" => $id];
+            if ($idClienteContexto !== null) {
+                $archiveParams = array_merge($archiveParams, parametrosFiltroCliente($entidad, $idClienteContexto));
+            }
+            $stmt->execute($archiveParams);
             $record = $stmt->fetch();
             if (!$record) {
                 $pdo->rollBack();
@@ -565,6 +778,11 @@ try {
             responder(["success" => true]);
         }
 
+        if ($idClienteContexto !== null
+            && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $id, $idClienteContexto)) {
+            $pdo->rollBack();
+            responder(["error" => "No puedes reactivar un registro ajeno al cliente seleccionado"], 404);
+        }
         $restore = $pdo->prepare(
             "DELETE FROM admin_bajas
              WHERE entidad COLLATE utf8mb4_unicode_ci = :entidad COLLATE utf8mb4_unicode_ci
