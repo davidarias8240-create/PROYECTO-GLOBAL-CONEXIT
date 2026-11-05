@@ -169,6 +169,278 @@ function normalizarValor(array $column, mixed $value): mixed
     return $value;
 }
 
+function validarFechaCreacion(string $entidad, array $values): void
+{
+    $fechaActualDesde = [
+        "planes" => ["vigencia_inicio" => "date"],
+        "contratos" => ["fecha_inicio" => "date"],
+        "facturas" => ["fecha_emision" => "date"],
+        "ordenes" => ["fecha_programada" => "datetime"],
+    ];
+    $campos = $fechaActualDesde[$entidad] ?? [];
+    $zonaHoraria = new DateTimeZone("America/Bogota");
+    $ahora = new DateTimeImmutable("now", $zonaHoraria);
+    $hoy = $ahora->format("Y-m-d");
+
+    foreach ($campos as $campo => $tipo) {
+        if (!isset($values[$campo]) || !is_string($values[$campo])) {
+            continue;
+        }
+        $fecha = substr(trim($values[$campo]), 0, 10);
+        $parsed = DateTimeImmutable::createFromFormat("!Y-m-d", $fecha);
+        if (!$parsed || $parsed->format("Y-m-d") !== $fecha) {
+            responder(["error" => "La fecha de " . $campo . " no es válida"], 400);
+        }
+        if ($fecha < $hoy) {
+            responder(["error" => "La fecha de " . $campo . " no puede ser anterior a hoy"], 400);
+        }
+        if ($tipo === "datetime") {
+            $fechaHoraTexto = substr(trim($values[$campo]), 0, 16);
+            $fechaHora = DateTimeImmutable::createFromFormat(
+                "!Y-m-d H:i",
+                $fechaHoraTexto,
+                $zonaHoraria
+            );
+            $erroresFechaHora = DateTimeImmutable::getLastErrors();
+            if (!$fechaHora
+                || $fechaHora->format("Y-m-d H:i") !== $fechaHoraTexto
+                || ($erroresFechaHora !== false
+                    && ($erroresFechaHora["warning_count"] > 0 || $erroresFechaHora["error_count"] > 0))) {
+                responder(["error" => "La fecha de " . $campo . " no es válida"], 400);
+            }
+            $ahoraSinSegundos = $ahora->setTime(
+                (int) $ahora->format("H"),
+                (int) $ahora->format("i"),
+                0
+            );
+            if (!$fechaHora || $fechaHora < $ahoraSinSegundos) {
+                responder(["error" => "La fecha programada no puede estar en el pasado"], 400);
+            }
+        }
+    }
+}
+
+function montoMonetarioValido(mixed $value): bool
+{
+    if (!is_string($value) && !is_int($value) && !is_float($value)) {
+        return false;
+    }
+    $formatted = (string) $value;
+    return preg_match("/^\\d+(?:\\.\\d{1,2})?$/D", $formatted) === 1
+        && is_finite((float) $formatted)
+        && (float) $formatted > 0;
+}
+
+function pagoPorClaveIdempotencia(PDO $pdo, string $clave): array|false
+{
+    $stmt = $pdo->prepare(
+        "SELECT p.*,
+                EXISTS (
+                    SELECT 1 FROM admin_bajas b
+                    WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'pagos' COLLATE utf8mb4_unicode_ci
+                      AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                          CAST(p.id_pago AS CHAR) COLLATE utf8mb4_unicode_ci
+                ) AS archivado
+         FROM pago p
+         WHERE p.idempotencia_key = :clave
+         LIMIT 1 FOR UPDATE"
+    );
+    $stmt->execute([":clave" => $clave]);
+    return $stmt->fetch();
+}
+
+function pagoCoincideConSolicitud(array $pago, array $values): bool
+{
+    foreach (["id_factura", "medio"] as $field) {
+        if (array_key_exists($field, $values)
+            && (string) $pago[$field] !== (string) $values[$field]) {
+            return false;
+        }
+    }
+    if ((string) $pago["estado"] !== (string) ($values["estado"] ?? "REGISTRADO")) {
+        return false;
+    }
+
+    if (array_key_exists("valor", $values)
+        && number_format((float) $pago["valor"], 2, ".", "")
+            !== number_format((float) $values["valor"], 2, ".", "")) {
+        return false;
+    }
+    foreach (["referencia", "motivo_anulacion"] as $field) {
+        if (trim((string) ($pago[$field] ?? "")) !== trim((string) ($values[$field] ?? ""))) {
+            return false;
+        }
+    }
+    if (isset($values["fecha"])
+        && substr((string) $pago["fecha"], 0, 16)
+            !== substr((string) $values["fecha"], 0, 16)) {
+        return false;
+    }
+    return true;
+}
+
+function validarRelacionesEntidad(PDO $pdo, string $entidad, array $values): void
+{
+    if ($entidad === "contratos"
+        && isset($values["id_cliente"], $values["id_direccion"])) {
+        $stmt = $pdo->prepare(
+            "SELECT 1 FROM direccion
+             WHERE id_direccion = :id_direccion AND id_cliente = :id_cliente
+             LIMIT 1"
+        );
+        $stmt->execute([
+            ":id_direccion" => $values["id_direccion"],
+            ":id_cliente" => $values["id_cliente"],
+        ]);
+        if (!$stmt->fetchColumn()) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            responder(["error" => "La dirección seleccionada no pertenece al cliente"], 409);
+        }
+    }
+
+    if ($entidad === "ordenes"
+        && isset($values["id_contrato"], $values["id_direccion"])) {
+        $stmt = $pdo->prepare(
+            "SELECT 1
+             FROM contrato co
+             INNER JOIN direccion d ON d.id_direccion = :id_direccion
+             WHERE co.id_contrato = :id_contrato
+               AND d.id_cliente = co.id_cliente
+             LIMIT 1"
+        );
+        $stmt->execute([
+            ":id_direccion" => $values["id_direccion"],
+            ":id_contrato" => $values["id_contrato"],
+        ]);
+        if (!$stmt->fetchColumn()) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            responder(["error" => "La dirección seleccionada no pertenece al cliente del contrato"], 409);
+        }
+    }
+}
+
+function bloquearContratoFactura(PDO $pdo, string $idContrato): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT id_contrato FROM contrato WHERE id_contrato = :id_contrato FOR UPDATE"
+    );
+    $stmt->execute([":id_contrato" => $idContrato]);
+    return (bool) $stmt->fetchColumn();
+}
+
+function existeFacturaParaPeriodo(PDO $pdo, string $idContrato, string $idPeriodo, ?string $idFactura = null): bool
+{
+    $idExclusion = $idFactura === null ? "" : " AND f.id_factura <> :id_factura";
+    $stmt = $pdo->prepare(
+        "SELECT 1
+         FROM factura f
+         INNER JOIN periodo_facturacion pf ON pf.id_periodo = f.id_periodo
+         INNER JOIN periodo_facturacion periodo_solicitado
+             ON periodo_solicitado.id_periodo = :id_periodo
+            AND periodo_solicitado.fecha_inicio = pf.fecha_inicio
+            AND periodo_solicitado.fecha_fin = pf.fecha_fin
+         WHERE f.id_contrato = :id_contrato{$idExclusion}
+         LIMIT 1"
+    );
+    $params = [":id_periodo" => $idPeriodo, ":id_contrato" => $idContrato];
+    if ($idFactura !== null) {
+        $params[":id_factura"] = $idFactura;
+    }
+    $stmt->execute($params);
+    return (bool) $stmt->fetchColumn();
+}
+
+function obtenerFacturaBloqueada(PDO $pdo, string $idFactura): array|false
+{
+    $stmt = $pdo->prepare(
+        "SELECT id_factura, total, saldo, fecha_vencimiento, estado
+         FROM factura WHERE id_factura = :id_factura FOR UPDATE"
+    );
+    $stmt->execute([":id_factura" => $idFactura]);
+    return $stmt->fetch();
+}
+
+function totalPagosRegistrados(PDO $pdo, string $idFactura, ?string $idPagoExcluido = null): float
+{
+    $exclusion = $idPagoExcluido === null ? "" : " AND p.id_pago <> :id_pago_excluido";
+    $stmt = $pdo->prepare(
+        "SELECT COALESCE(SUM(p.valor), 0)
+         FROM pago p
+         WHERE p.id_factura = :id_factura
+           AND p.estado = 'REGISTRADO'
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'pagos' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                     CAST(p.id_pago AS CHAR) COLLATE utf8mb4_unicode_ci
+           ){$exclusion}"
+    );
+    $params = [":id_factura" => $idFactura];
+    if ($idPagoExcluido !== null) {
+        $params[":id_pago_excluido"] = $idPagoExcluido;
+    }
+    $stmt->execute($params);
+    return (float) $stmt->fetchColumn();
+}
+
+function referenciaPagoDuplicada(PDO $pdo, array $values, ?string $idPago = null): bool
+{
+    $referencia = trim((string) ($values["referencia"] ?? ""));
+    if ($referencia === "" || ($values["estado"] ?? "REGISTRADO") !== "REGISTRADO") {
+        return false;
+    }
+
+    $exclusion = $idPago === null ? "" : " AND p.id_pago <> :id_pago";
+    $stmt = $pdo->prepare(
+        "SELECT 1 FROM pago p
+         WHERE p.id_factura = :id_factura
+           AND p.referencia = :referencia
+           AND p.estado = 'REGISTRADO'
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'pagos' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                     CAST(p.id_pago AS CHAR) COLLATE utf8mb4_unicode_ci
+           ){$exclusion}
+         LIMIT 1"
+    );
+    $params = [
+        ":id_factura" => $values["id_factura"],
+        ":referencia" => $referencia,
+    ];
+    if ($idPago !== null) {
+        $params[":id_pago"] = $idPago;
+    }
+    $stmt->execute($params);
+    return (bool) $stmt->fetchColumn();
+}
+
+function actualizarSaldoFactura(PDO $pdo, string $idFactura): void
+{
+    $factura = obtenerFacturaBloqueada($pdo, $idFactura);
+    if (!$factura || $factura["estado"] === "ANULADA") {
+        return;
+    }
+
+    $saldo = max(0, round((float) $factura["total"] - totalPagosRegistrados($pdo, $idFactura), 2));
+    $hoy = (new DateTimeImmutable("today", new DateTimeZone("America/Bogota")))->format("Y-m-d");
+    $estado = $saldo <= 0
+        ? "PAGADA"
+        : ((string) $factura["fecha_vencimiento"] < $hoy ? "VENCIDA" : "PENDIENTE");
+    $stmt = $pdo->prepare(
+        "UPDATE factura SET saldo = :saldo, estado = :estado WHERE id_factura = :id_factura"
+    );
+    $stmt->execute([
+        ":saldo" => number_format($saldo, 2, ".", ""),
+        ":estado" => $estado,
+        ":id_factura" => $idFactura,
+    ]);
+}
+
 function obtenerMetadatos(PDO $pdo, string $baseDatos, string $tabla, string $clave): array
 {
     $columns = $pdo->prepare(
@@ -202,7 +474,7 @@ function obtenerMetadatos(PDO $pdo, string $baseDatos, string $tabla, string $cl
     $meta = [];
     foreach ($rows as $column) {
         $name = $column["COLUMN_NAME"];
-        if ($name === "contrasena_hash") {
+        if (in_array($name, ["contrasena_hash", "idempotencia_key"], true)) {
             continue;
         }
         $enumValues = [];
@@ -260,12 +532,39 @@ function obtenerOpcionesRelacion(
     $keySql = "`" . str_replace("`", "``", $columnaClave) . "`";
     if ($tabla === "contrato") {
         // Para elegir una factura, se identifica el contrato por el cliente y el plan, no por su ID interno.
-        $candidateSql = "contrato.id_contrato AS id, cliente.nombres AS cliente_nombre,
+        $candidateSql = "contrato.id_contrato AS id, contrato.id_cliente AS cliente_id,
+            contrato.id_direccion AS direccion_id, cliente.nombres AS cliente_nombre,
             cliente.numero_cliente AS cliente_numero, plan.nombre AS plan_nombre,
+            plan.precio AS plan_precio, cliente.tipo_documento, cliente.numero_documento,
+            cliente.telefono, cliente.correo, direccion.direccion AS direccion_texto,
             contrato.fecha_inicio";
         $fromSql = "contrato
             INNER JOIN cliente ON cliente.id_cliente = contrato.id_cliente
-            INNER JOIN plan ON plan.id_plan = contrato.id_plan";
+            INNER JOIN plan ON plan.id_plan = contrato.id_plan
+            INNER JOIN direccion ON direccion.id_direccion = contrato.id_direccion";
+    } elseif ($tabla === "factura") {
+        $labelCandidates = ["numero", "cliente_nombre"];
+        $candidateSql = "factura.id_factura AS id, factura.numero, factura.total, factura.saldo,
+            factura.estado, cliente.id_cliente AS cliente_id, cliente.nombres AS cliente_nombre";
+        $fromSql = "factura
+            INNER JOIN contrato ON contrato.id_contrato = factura.id_contrato
+            INNER JOIN cliente ON cliente.id_cliente = contrato.id_cliente";
+    } elseif ($tabla === "cliente") {
+        $candidateSql = "cliente.id_cliente AS id, cliente.nombres, cliente.numero_cliente,
+            cliente.tipo_documento, cliente.numero_documento, cliente.telefono, cliente.correo";
+        $fromSql = "cliente";
+    } elseif ($tabla === "direccion") {
+        $candidateSql = "direccion.id_direccion AS id, direccion.direccion, direccion.ciudad,
+            direccion.id_cliente AS cliente_id";
+        $fromSql = "direccion";
+    } elseif ($tabla === "plan") {
+        $candidateSql = "plan.id_plan AS id, plan.nombre, plan.precio, plan.velocidad";
+        $fromSql = "plan";
+    } elseif ($tabla === "periodo_facturacion") {
+        $candidateSql = "periodo_facturacion.id_periodo AS id,
+            periodo_facturacion.fecha_inicio, periodo_facturacion.fecha_fin,
+            periodo_facturacion.fecha_vencimiento";
+        $fromSql = "periodo_facturacion";
     } else {
         $candidateSql = implode(",", array_map(
             static fn(string $column): string => "`" . str_replace("`", "``", $column) . "`",
@@ -277,6 +576,9 @@ function obtenerOpcionesRelacion(
     $params = [];
     if ($tabla === "rol") {
         $filters[] = "`estado` = 'ACTIVO'";
+    }
+    if ($tabla === "plan") {
+        $filters[] = "plan.estado = 'ACTIVO'";
     }
     foreach ($configuracion as $entity => $definition) {
         if ($definition["tabla"] === $tabla && $definition["archivable"]) {
@@ -292,7 +594,13 @@ function obtenerOpcionesRelacion(
     }
     $where = $filters ? " WHERE " . implode(" AND ", $filters) : "";
     $query = $pdo->prepare(
-        "SELECT " . ($tabla === "contrato" ? $candidateSql : "{$keySql} AS id, {$candidateSql}")
+        "SELECT " . (in_array(
+            $tabla,
+            ["contrato", "factura", "cliente", "direccion", "plan", "periodo_facturacion"],
+            true
+        )
+            ? $candidateSql
+            : "{$keySql} AS id, {$candidateSql}")
         . " FROM {$fromSql}{$where} ORDER BY {$tableSql}.{$keySql} ASC LIMIT 1000"
     );
     $query->execute($params);
@@ -305,7 +613,49 @@ function obtenerOpcionesRelacion(
                 $labels[] = (string) $row[$candidate];
             }
         }
-        $options[] = ["value" => $row["id"], "label" => implode(" · ", $labels)];
+        $details = match ($tabla) {
+            "cliente" => [
+                "nombres" => $row["nombres"],
+                "numero_cliente" => $row["numero_cliente"],
+                "tipo_documento" => $row["tipo_documento"],
+                "numero_documento" => $row["numero_documento"],
+                "telefono" => $row["telefono"],
+                "correo" => $row["correo"],
+            ],
+            "direccion" => ["cliente_id" => $row["cliente_id"]],
+            "contrato" => [
+                "cliente_id" => $row["cliente_id"],
+                "direccion_id" => $row["direccion_id"],
+                "cliente_nombre" => $row["cliente_nombre"],
+                "cliente_numero" => $row["cliente_numero"],
+                "tipo_documento" => $row["tipo_documento"],
+                "numero_documento" => $row["numero_documento"],
+                "telefono" => $row["telefono"],
+                "correo" => $row["correo"],
+                "direccion" => $row["direccion_texto"],
+                "plan_nombre" => $row["plan_nombre"],
+                "plan_precio" => $row["plan_precio"],
+            ],
+            "factura" => [
+                "cliente_nombre" => $row["cliente_nombre"],
+                "total" => $row["total"],
+                "saldo" => $row["saldo"],
+                "estado" => $row["estado"],
+            ],
+            "plan" => [
+                "precio" => $row["precio"],
+                "velocidad" => $row["velocidad"],
+            ],
+            "periodo_facturacion" => [
+                "fecha_vencimiento" => $row["fecha_vencimiento"],
+            ],
+            default => [],
+        };
+        $options[] = [
+            "value" => $row["id"],
+            "label" => implode(" · ", $labels),
+            "details" => $details,
+        ];
     }
 
     if ($idClienteContexto !== null) {
@@ -317,6 +667,9 @@ function obtenerOpcionesRelacion(
             $user->execute([":id_cliente" => $idClienteContexto]);
             $userId = $user->fetchColumn();
             $allowedIds = $userId === false || $userId === null ? [] : [(string) $userId];
+        } elseif ($tabla === "plan" && $entidadContexto === "contratos") {
+            // Los planes son un catálogo independiente y se pueden contratar para un cliente nuevo.
+            $allowedIds = null;
         } else {
             $relationEntity = match ($tabla) {
                 "direccion" => "direcciones",
@@ -454,6 +807,18 @@ try {
 
     $data = json_decode(file_get_contents("php://input"), true);
     $id = is_array($data) && isset($data["id"]) ? trim((string) $data["id"]) : "";
+    $idempotenciaPago = null;
+    if ($method === "POST" && $operacion === "crear" && $tabla === "pago") {
+        $idempotenciaPago = is_array($data) && is_string($data["idempotencia_key"] ?? null)
+            ? trim($data["idempotencia_key"])
+            : "";
+        if (!preg_match(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
+            $idempotenciaPago
+        )) {
+            responder(["error" => "La clave de idempotencia del pago no es válida"], 400);
+        }
+    }
     if ($idClienteContexto !== null
         && in_array($entidad, ["planes", "periodos"], true)
         && $method === "POST") {
@@ -494,7 +859,9 @@ try {
                 }
                 continue;
             }
-            if (!isset($columns[$field]) || $columns[$field]["generated"]) {
+            $fechaPagoEditable = $tabla === "pago" && $field === "fecha";
+            if (!isset($columns[$field])
+                || ($columns[$field]["generated"] && !$fechaPagoEditable)) {
                 responder(["error" => "Campo no permitido: " . $field], 400);
             }
             if ($value === "" && $columns[$field]["nullable"]) {
@@ -515,8 +882,19 @@ try {
                 responder(["error" => "El campo " . $column["name"] . " es obligatorio"], 400);
             }
         }
+        validarFechaCreacion($entidad, $values);
+        validarRelacionesEntidad($pdo, $entidad, $values);
+        if ($tabla === "pago") {
+            $valorPago = $values["valor"] ?? null;
+            if (!montoMonetarioValido($valorPago)) {
+                responder(["error" => "El valor del pago debe ser mayor que cero"], 400);
+            }
+        }
         if (!$values) {
             responder(["error" => "No se recibieron campos para crear el registro"], 400);
+        }
+        if ($tabla === "pago") {
+            $values["idempotencia_key"] = $idempotenciaPago;
         }
         $rolClienteId = null;
         if ($tabla === "cliente") {
@@ -535,6 +913,59 @@ try {
         $fieldsSql = implode(", ", array_map(static fn(string $name): string => "`{$name}`", $names));
         $paramsSql = implode(", ", array_map(static fn(string $name): string => ":" . $name, $names));
         $pdo->beginTransaction();
+        if ($tabla === "factura") {
+            $idContratoFactura = (string) ($values["id_contrato"] ?? "");
+            $idPeriodoFactura = (string) ($values["id_periodo"] ?? "");
+            if ($idContratoFactura === "" || $idPeriodoFactura === ""
+                || !bloquearContratoFactura($pdo, $idContratoFactura)) {
+                $pdo->rollBack();
+                responder(["error" => "Selecciona un contrato válido para la factura"], 400);
+            }
+            if (existeFacturaParaPeriodo($pdo, $idContratoFactura, $idPeriodoFactura)) {
+                $pdo->rollBack();
+                responder(["error" => "Ya existe una factura para este contrato y período"], 409);
+            }
+        }
+        if ($tabla === "pago") {
+            $idFacturaPago = (string) ($values["id_factura"] ?? "");
+            $facturaPago = $idFacturaPago === "" ? false : obtenerFacturaBloqueada($pdo, $idFacturaPago);
+            if (!$facturaPago) {
+                $pdo->rollBack();
+                responder(["error" => "Selecciona una factura válida que admita pagos"], 409);
+            }
+            $pagoExistente = pagoPorClaveIdempotencia($pdo, $idempotenciaPago);
+            if ($pagoExistente) {
+                if ((int) $pagoExistente["archivado"] === 1
+                    || !pagoCoincideConSolicitud($pagoExistente, $values)) {
+                    $pdo->rollBack();
+                    responder(["error" => "La clave de idempotencia ya se usó con otra solicitud"], 409);
+                }
+                $pdo->commit();
+                responder(["success" => true, "id" => (string) $pagoExistente["id_pago"], "repetido" => true]);
+            }
+            if ($facturaPago["estado"] === "ANULADA") {
+                $pdo->rollBack();
+                responder(["error" => "Selecciona una factura válida que admita pagos"], 409);
+            }
+            if (($values["estado"] ?? "REGISTRADO") === "REGISTRADO") {
+                if (!in_array($facturaPago["estado"], ["PENDIENTE", "VENCIDA"], true)) {
+                    $pdo->rollBack();
+                    responder(["error" => "La factura no admite nuevos pagos"], 409);
+                }
+                $saldoReal = max(
+                    0,
+                    round((float) $facturaPago["total"] - totalPagosRegistrados($pdo, $idFacturaPago), 2)
+                );
+                if ((float) $values["valor"] > $saldoReal) {
+                    $pdo->rollBack();
+                    responder(["error" => "El pago supera el saldo pendiente de la factura"], 409);
+                }
+                if (referenciaPagoDuplicada($pdo, $values)) {
+                    $pdo->rollBack();
+                    responder(["error" => "Ya existe un pago registrado con esa referencia para la factura"], 409);
+                }
+            }
+        }
         if ($tabla === "cliente") {
             $userInsert = $pdo->prepare(
                 "INSERT INTO usuario (id_rol, correo, contrasena_hash, estado)
@@ -560,6 +991,9 @@ try {
             && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $newId, $idClienteContexto)) {
             $pdo->rollBack();
             responder(["error" => "El registro no quedó asociado al cliente seleccionado"], 409);
+        }
+        if ($tabla === "pago" && ($values["estado"] ?? "REGISTRADO") === "REGISTRADO") {
+            actualizarSaldoFactura($pdo, (string) $values["id_factura"]);
         }
 
         if ($tabla === "cliente") {
@@ -602,6 +1036,7 @@ try {
                 ]);
             }
         }
+        unset($values["idempotencia_key"]);
         unset($values["contrasena_hash"]);
         auditar($pdo, $tabla, $newId, "CREAR", $values);
         $pdo->commit();
@@ -650,7 +1085,9 @@ try {
                 $values[$field] = $value;
                 continue;
             }
-            if ($field === $clave || !isset($columns[$field]) || $columns[$field]["generated"]) {
+            $fechaPagoEditable = $tabla === "pago" && $field === "fecha";
+            if ($field === $clave || !isset($columns[$field])
+                || ($columns[$field]["generated"] && !$fechaPagoEditable)) {
                 responder(["error" => "Campo no permitido: " . $field], 400);
             }
             if ($value === "" && $columns[$field]["nullable"]) {
@@ -692,6 +1129,89 @@ try {
         $updateValues[":record_id"] = $id;
         $stmt = $pdo->prepare("UPDATE `{$tabla}` SET {$assignments} WHERE `{$clave}` = :record_id");
         $pdo->beginTransaction();
+        $paymentInvoiceIds = [];
+        if (in_array($tabla, ["contrato", "orden_servicio", "factura", "pago"], true)) {
+            $currentStmt = $pdo->prepare(
+                "SELECT * FROM `{$tabla}` WHERE `{$clave}` = :record_id FOR UPDATE"
+            );
+            $currentStmt->execute([":record_id" => $id]);
+            $currentRecord = $currentStmt->fetch();
+            if (!$currentRecord) {
+                $pdo->rollBack();
+                responder(["error" => "No se encontró el registro activo"], 404);
+            }
+            $effectiveValues = array_merge($currentRecord, $values);
+            if (in_array($tabla, ["contrato", "orden_servicio"], true)) {
+                validarRelacionesEntidad($pdo, $entidad, $effectiveValues);
+            }
+            if ($tabla === "factura") {
+                $contractIds = array_unique([
+                    (string) $currentRecord["id_contrato"],
+                    (string) ($effectiveValues["id_contrato"] ?? ""),
+                ]);
+                sort($contractIds, SORT_NUMERIC);
+                foreach ($contractIds as $contractId) {
+                    if ($contractId === "" || !bloquearContratoFactura($pdo, $contractId)) {
+                        $pdo->rollBack();
+                        responder(["error" => "Selecciona un contrato válido para la factura"], 400);
+                    }
+                }
+                if (existeFacturaParaPeriodo(
+                    $pdo,
+                    (string) $effectiveValues["id_contrato"],
+                    (string) $effectiveValues["id_periodo"],
+                    $id
+                )) {
+                    $pdo->rollBack();
+                    responder(["error" => "Ya existe una factura para este contrato y período"], 409);
+                }
+            }
+            if ($tabla === "pago") {
+                $oldInvoiceId = (string) $currentRecord["id_factura"];
+                $newInvoiceId = (string) ($effectiveValues["id_factura"] ?? "");
+                $paymentInvoiceIds = array_values(array_unique([$oldInvoiceId, $newInvoiceId]));
+                sort($paymentInvoiceIds, SORT_NUMERIC);
+                $lockedInvoices = [];
+                foreach ($paymentInvoiceIds as $invoiceId) {
+                    $lockedInvoice = $invoiceId === "" ? false : obtenerFacturaBloqueada($pdo, $invoiceId);
+                    if (!$lockedInvoice) {
+                        $pdo->rollBack();
+                        responder(["error" => "Selecciona una factura válida"], 409);
+                    }
+                    $lockedInvoices[$invoiceId] = $lockedInvoice;
+                }
+                $paymentValues = array_merge($currentRecord, $effectiveValues);
+                $valorPago = $paymentValues["valor"] ?? null;
+                if (!montoMonetarioValido($valorPago)) {
+                    $pdo->rollBack();
+                    responder(["error" => "El valor del pago debe ser mayor que cero"], 400);
+                }
+                if (($paymentValues["estado"] ?? "") === "REGISTRADO") {
+                    $facturaDestino = $lockedInvoices[$newInvoiceId];
+                    if ($facturaDestino["estado"] === "ANULADA") {
+                        $pdo->rollBack();
+                        responder(["error" => "No se puede asociar un pago a una factura anulada"], 409);
+                    }
+                    $exclusion = $oldInvoiceId === $newInvoiceId ? $id : null;
+                    $saldoDisponible = max(
+                        0,
+                        round(
+                            (float) $facturaDestino["total"]
+                            - totalPagosRegistrados($pdo, $newInvoiceId, $exclusion),
+                            2
+                        )
+                    );
+                    if ((float) $valorPago > $saldoDisponible) {
+                        $pdo->rollBack();
+                        responder(["error" => "El pago supera el saldo pendiente de la factura"], 409);
+                    }
+                    if (referenciaPagoDuplicada($pdo, $paymentValues, $id)) {
+                        $pdo->rollBack();
+                        responder(["error" => "Ya existe un pago registrado con esa referencia para la factura"], 409);
+                    }
+                }
+            }
+        }
         if ($tabla === "cliente" && array_key_exists("correo", $values)) {
             // El correo también es el usuario de inicio de sesión del cliente vinculado.
             $linkedUser = $pdo->prepare("SELECT id_usuario FROM cliente WHERE id_cliente = :id_cliente");
@@ -716,6 +1236,11 @@ try {
             && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $id, $idClienteContexto)) {
             $pdo->rollBack();
             responder(["error" => "No puedes asociar el registro a otro cliente"], 409);
+        }
+        if ($tabla === "pago") {
+            foreach ($paymentInvoiceIds as $invoiceId) {
+                actualizarSaldoFactura($pdo, $invoiceId);
+            }
         }
         unset($input["contrasena_hash"]);
         auditar($pdo, $tabla, $id, "EDITAR", $input);
@@ -745,6 +1270,35 @@ try {
             }
         }
         $pdo->beginTransaction();
+        $paymentInvoiceId = null;
+        if ($tabla === "pago") {
+            $paymentStmt = $pdo->prepare(
+                "SELECT id_factura, valor, estado FROM pago WHERE id_pago = :id_pago FOR UPDATE"
+            );
+            $paymentStmt->execute([":id_pago" => $id]);
+            $payment = $paymentStmt->fetch();
+            if (!$payment) {
+                $pdo->rollBack();
+                responder(["error" => "No se encontró el pago"], 404);
+            }
+            $paymentInvoiceId = (string) $payment["id_factura"];
+            $lockedInvoice = obtenerFacturaBloqueada($pdo, $paymentInvoiceId);
+            if (!$lockedInvoice) {
+                $pdo->rollBack();
+                responder(["error" => "No se encontró la factura asociada al pago"], 404);
+            }
+            if ($operacion === "reactivar" && $payment["estado"] === "REGISTRADO") {
+                $saldoDisponible = max(
+                    0,
+                    round((float) $lockedInvoice["total"] - totalPagosRegistrados($pdo, $paymentInvoiceId), 2)
+                );
+                if ((float) $payment["valor"] > $saldoDisponible
+                    || $lockedInvoice["estado"] === "ANULADA") {
+                    $pdo->rollBack();
+                    responder(["error" => "No se puede reactivar el pago porque excede el saldo de la factura"], 409);
+                }
+            }
+        }
         if ($operacion === "eliminar") {
             $hasState = in_array("estado", array_column($metadata["columns"], "name"), true);
             $stateSelect = $hasState ? "`estado`" : "'' AS estado";
@@ -774,6 +1328,9 @@ try {
                 ":admin" => $_SESSION["id_usuario"]
             ]);
             auditar($pdo, $tabla, $id, "DESACTIVAR");
+            if ($tabla === "pago" && $payment["estado"] === "REGISTRADO") {
+                actualizarSaldoFactura($pdo, $paymentInvoiceId);
+            }
             $pdo->commit();
             responder(["success" => true]);
         }
@@ -794,6 +1351,9 @@ try {
             responder(["error" => "No se encontró un registro desactivado"], 404);
         }
         auditar($pdo, $tabla, $id, "REACTIVAR");
+        if ($tabla === "pago" && $payment["estado"] === "REGISTRADO") {
+            actualizarSaldoFactura($pdo, $paymentInvoiceId);
+        }
         $pdo->commit();
         responder(["success" => true]);
     }

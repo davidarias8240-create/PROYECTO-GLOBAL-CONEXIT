@@ -6,7 +6,7 @@ import { adminEntities } from "../config/adminEntities";
 
 const sidebarGroups = [
     { label: "Administración", icon: "administration", keys: ["roles", "usuarios", "auditoria"] },
-    { label: "Clientes", icon: "clients", keys: ["clientes", "direcciones", "solicitudes", "tickets", "interacciones", "notificaciones"] },
+    { label: "Clientes", icon: "clients", keys: ["clientes", "solicitudes", "tickets", "interacciones", "notificaciones"] },
     { label: "Servicios", icon: "services", keys: ["planes", "contratos", "periodos", "ordenes"] },
     { label: "Finanzas", icon: "finances", keys: ["facturas", "pagos", "ajustes"] },
 ];
