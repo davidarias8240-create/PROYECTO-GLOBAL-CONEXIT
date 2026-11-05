@@ -30,6 +30,146 @@ function humanize(name) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+function relationOption(metadata, row, field) {
+  const column = metadata?.columnas.find((item) => item.name === field);
+  return column?.options?.find((option) => String(option.value) === String(row[field]));
+}
+
+function documentDate(value) {
+  if (!value) return "No especificada";
+  const rawValue = String(value);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rawValue);
+  const date = dateOnly
+    ? new Date(Date.UTC(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]), 12))
+    : new Date(rawValue.includes(" ") ? rawValue.replace(" ", "T") : rawValue);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat("es-CO", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Bogota",
+  }).format(date);
+}
+
+function documentMoney(value) {
+  return new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    minimumFractionDigits: 2,
+  }).format(Number(value || 0));
+}
+
+function documentField(label, value) {
+  if (value === null || value === undefined || value === "") return "";
+  return `<div class="field"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function buildRelatedDocument(entity, row, metadata) {
+  const isContract = entity === "contratos";
+  const clientOption = relationOption(metadata, row, isContract ? "id_cliente" : "id_contrato");
+  const clientDetails = clientOption?.details;
+  const clientName = isContract
+    ? clientDetails?.nombres || clientOption?.label?.split(" · ")[0]
+    : clientDetails?.cliente_nombre;
+  const title = isContract ? "Contrato de servicio" : "Factura de servicio";
+  const reference = isContract
+    ? `Contrato #${row.id_contrato}`
+    : `Factura ${row.numero || `#${row.id_factura}`}`;
+  const clientFields = [
+    documentField("Cliente", clientName),
+    documentField("Número de cliente", clientDetails?.cliente_numero || clientDetails?.numero_cliente),
+    documentField(
+      "Documento",
+      [clientDetails?.tipo_documento, clientDetails?.numero_documento].filter(Boolean).join(" ")
+    ),
+    documentField("Teléfono", clientDetails?.telefono),
+    documentField("Correo", clientDetails?.correo),
+  ].join("");
+
+  let content;
+  if (isContract) {
+    const plan = relationOption(metadata, row, "id_plan");
+    const address = relationOption(metadata, row, "id_direccion");
+    content = `
+      <section><h2>Datos del cliente</h2><div class="grid">${clientFields}</div></section>
+      <section><h2>Servicio contratado</h2><div class="grid">
+        ${documentField("Plan", plan?.label)}
+        ${documentField("Velocidad", plan?.details?.velocidad)}
+        ${documentField("Valor mensual", plan?.details?.precio == null ? "" : documentMoney(plan.details.precio))}
+        ${documentField("Dirección del servicio", address?.label)}
+      </div></section>
+      <section><h2>Vigencia y estado</h2><div class="grid">
+        ${documentField("Fecha de inicio", documentDate(row.fecha_inicio))}
+        ${documentField("Fecha de finalización", documentDate(row.fecha_fin))}
+        ${documentField("Estado", row.estado)}
+        ${documentField("Motivo / observación", row.motivo_estado)}
+      </div></section>
+      <p class="note">Documento informativo generado a partir del registro del contrato en el sistema.</p>`;
+  } else {
+    const period = relationOption(metadata, row, "id_periodo");
+    const planName = clientDetails?.plan_nombre;
+    content = `
+      <section><h2>Datos del cliente</h2><div class="grid">${clientFields}</div></section>
+      <section><h2>Detalle de facturación</h2>
+        <div class="grid">
+          ${documentField("Contrato", `Contrato #${row.id_contrato}`)}
+          ${documentField("Plan", planName)}
+          ${documentField("Período facturado", period?.label)}
+          ${documentField("Fecha de emisión", documentDate(row.fecha_emision))}
+          ${documentField("Fecha de vencimiento", documentDate(row.fecha_vencimiento))}
+          ${documentField("Estado", row.estado)}
+        </div>
+        <table><thead><tr><th>Concepto</th><th class="amount">Valor</th></tr></thead>
+          <tbody><tr><td>Servicio ${escapeHtml(planName || "contratado")}</td><td class="amount">${escapeHtml(documentMoney(row.total))}</td></tr></tbody>
+          <tfoot>
+            <tr><th>Total</th><th class="amount">${escapeHtml(documentMoney(row.total))}</th></tr>
+            <tr><td>Saldo pendiente</td><td class="amount">${escapeHtml(documentMoney(row.saldo))}</td></tr>
+          </tfoot>
+        </table>
+      </section>
+      <p class="note">Documento generado a partir de la factura registrada en el sistema. El saldo refleja los pagos aplicados al momento de la consulta.</p>`;
+  }
+
+  const generatedAt = new Intl.DateTimeFormat("es-CO", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "America/Bogota",
+  }).format(new Date());
+  return `<!doctype html>
+    <html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(reference)}</title>
+      <style>
+        *{box-sizing:border-box}body{font:14px Arial,sans-serif;color:#252525;margin:0;padding:40px}
+        header{border-bottom:3px solid #e9650a;padding-bottom:18px;margin-bottom:28px}
+        .brand{color:#e9650a;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1px}
+        h1{font-size:25px;margin:8px 0}.reference{color:#555}
+        section{margin:24px 0}h2{font-size:16px;border-bottom:1px solid #ddd;padding-bottom:8px}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
+        .field span{display:block;color:#666;font-size:11px;text-transform:uppercase;margin-bottom:4px}
+        .field strong{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+        table{width:100%;border-collapse:collapse;margin-top:20px}
+        th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}
+        thead{background:#f4f4f4}.amount{text-align:right}
+        tfoot th,tfoot td{border-bottom:0}.note{font-size:11px;color:#666;margin-top:30px}
+        footer{border-top:1px solid #ddd;color:#777;font-size:10px;margin-top:40px;padding-top:10px}
+        @media print{body{padding:12mm}section{break-inside:avoid}header{break-after:avoid}}
+      </style>
+    </head><body>
+      <header><div class="brand">Global Conexit</div><h1>${escapeHtml(title)}</h1><div class="reference">${escapeHtml(reference)}</div></header>
+      ${content}
+      <footer>Generado el ${escapeHtml(generatedAt)} · Global Conexit</footer>
+    </body></html>`;
+}
+
 function inputType(column) {
   if (column.name === "correo") return "email";
   if (column.name === "telefono") return "tel";
@@ -56,11 +196,96 @@ function defaultFieldValue(column) {
   return String(column.default);
 }
 
-function EntityField({ column, value, onChange, disabled = false, requiredOverride }) {
+function currentBusinessDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Bogota",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+}
+
+function currentBusinessTime() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Bogota",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+}
+
+function currentBusinessDateTime() {
+  const { year, month, day } = currentBusinessDate();
+  const { hour, minute } = currentBusinessTime();
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function createIdempotencyKey() {
+  const bytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function minimumDate(entity, column) {
+  const restrictedFields = {
+    planes: ["vigencia_inicio"],
+    contratos: ["fecha_inicio"],
+    facturas: ["fecha_emision"],
+    ordenes: ["fecha_programada"],
+  };
+  if (!restrictedFields[entity]?.includes(column.name)) return undefined;
+
+  const { year, month, day } = currentBusinessDate();
+  if (column.type === "date") return `${year}-${month}-${day}`;
+  if (["datetime", "timestamp"].includes(column.type)) {
+    const { hour, minute } = currentBusinessTime();
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+  return undefined;
+}
+
+function formatRelationDetails(column, option) {
+  const details = option?.details;
+  if (!details) return "";
+  const money = (value) => new Intl.NumberFormat("es-CO", {
+    style: "currency",
+    currency: "COP",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+  if (column.relation.table === "cliente") {
+    return [
+      [details.tipo_documento, details.numero_documento].filter(Boolean).join(" "),
+      details.telefono,
+      details.correo,
+    ].filter(Boolean).join(" · ");
+  }
+  if (column.relation.table === "factura") {
+    return `Cliente: ${details.cliente_nombre} · Total: ${money(details.total)} · Saldo: ${money(details.saldo)} · ${details.estado}`;
+  }
+  if (column.relation.table === "contrato") {
+    return `Cliente: ${details.cliente_nombre} · Plan: ${money(details.plan_precio)} · Dirección: ${details.direccion}`;
+  }
+  if (column.relation.table === "plan") {
+    return `${details.velocidad} · ${money(details.precio)}`;
+  }
+  if (column.relation.table === "periodo_facturacion") {
+    return `Vence: ${details.fecha_vencimiento}`;
+  }
+  return "";
+}
+
+function EntityField({ entity, column, value, onChange, disabled = false, requiredOverride }) {
   const [relationSearch, setRelationSearch] = useState("");
   const label = humanize(column.name);
   const required = requiredOverride ?? (!column.nullable && column.default === null && !column.generated);
   const isBoolean = column.type === "tinyint" && column.columnType.includes("(1)");
+  const min = minimumDate(entity, column);
 
   if (isBoolean) {
     return (
@@ -120,6 +345,11 @@ function EntityField({ column, value, onChange, disabled = false, requiredOverri
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
+        {selectedOption && formatRelationDetails(column, selectedOption) && (
+          <small className="text-muted">
+            {formatRelationDetails(column, selectedOption)}
+          </small>
+        )}
       </label>
     );
   }
@@ -142,6 +372,7 @@ function EntityField({ column, value, onChange, disabled = false, requiredOverri
           className="form-control"
           type={inputType(column)}
           step={column.type === "decimal" || column.type === "float" || column.type === "double" ? "0.01" : undefined}
+          min={entity === "pagos" && column.name === "valor" ? "0.01" : min}
           value={fieldValue(column, value)}
           onChange={(event) => onChange(event.target.value)}
           required={required}
@@ -171,6 +402,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [notice, setNotice] = useState("");
   const requestSequence = useRef(0);
   const lastClientSearch = useRef("");
+  const relationRequestSequence = useRef(0);
+  const paymentIdempotencyKey = useRef(null);
 
   const loadData = useCallback(async (clientSearch = "") => {
     const requestId = ++requestSequence.current;
@@ -214,6 +447,36 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     return () => window.clearTimeout(timeout);
   }, [entity, loadData, search]);
 
+  useEffect(() => {
+    if (!showForm || !["contratos", "tickets", "solicitudes"].includes(entity)) return undefined;
+    const requestId = ++relationRequestSequence.current;
+    const selectedClientId = values.id_cliente || null;
+    let cancelled = false;
+
+    obtenerMetadatosEntidad(entity, selectedClientId)
+      .then((meta) => {
+        if (cancelled || requestId !== relationRequestSequence.current) return;
+        setMetadata((current) => current && ({
+          ...current,
+          columnas: current.columnas.map((column) => {
+            const updatedColumn = meta.columnas.find((item) => item.name === column.name);
+            return column.name !== "id_cliente" && column.relation && updatedColumn
+              ? { ...column, options: updatedColumn.options }
+              : column;
+          }),
+        }));
+      })
+      .catch((loadError) => {
+        if (!cancelled && requestId === relationRequestSequence.current) {
+          setError(loadError.message);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [entity, showForm, values.id_cliente]);
+
   const visibleColumns = useMemo(
     () => (metadata?.columnas || []).filter((column) =>
       !(entity === "clientes" && column.name === "id_usuario")
@@ -232,10 +495,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const formColumns = useMemo(
     () => visibleColumns.filter((column) =>
       column.name !== metadata.clave
-      && !column.generated
+      && (!column.generated || (entity === "pagos" && column.name === "fecha"))
       && column.name !== "contrasena_hash"
     ),
-    [metadata, visibleColumns]
+    [entity, metadata, visibleColumns]
   );
 
   const isClientRole = useMemo(() => {
@@ -261,6 +524,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const closeForm = () => {
     setShowForm(false);
     setEditingId(null);
+    paymentIdempotencyKey.current = null;
     setValues({});
     setCustomer({});
     setPassword("");
@@ -286,10 +550,18 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   const startCreate = () => {
     setNotice("");
+    paymentIdempotencyKey.current = entity === "pagos" ? createIdempotencyKey() : null;
     const initialValues = Object.fromEntries(formColumns.map((column) => [
       column.name,
       defaultFieldValue(column),
     ]));
+    if (entity === "pagos" && Object.hasOwn(initialValues, "fecha")) {
+      initialValues.fecha = currentBusinessDateTime();
+    }
+    if (entity === "facturas" && Object.hasOwn(initialValues, "fecha_emision")) {
+      const { year, month, day } = currentBusinessDate();
+      initialValues.fecha_emision = `${year}-${month}-${day}`;
+    }
     if (customerId && Object.hasOwn(initialValues, "id_cliente")) {
       initialValues.id_cliente = customerId;
     }
@@ -303,8 +575,50 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setShowForm(true);
   };
 
+  const handleFieldChange = (column, value) => {
+    setValues((current) => {
+      const next = { ...current, [column.name]: value };
+      if (column.name === "id_cliente" && String(current.id_cliente ?? "") !== String(value)) {
+        for (const relatedColumn of formColumns) {
+          if (relatedColumn.name === "id_cliente") continue;
+          if (["direccion", "contrato", "factura"].includes(relatedColumn.relation?.table)) {
+            next[relatedColumn.name] = "";
+          }
+        }
+        if (entity === "solicitudes") {
+          const client = column.options?.find((option) => String(option.value) === String(value));
+          next.nombre_contacto = client?.details?.nombres || "";
+          next.correo = client?.details?.correo || "";
+          next.telefono = client?.details?.telefono || "";
+        }
+      }
+
+      if (column.name === "id_contrato" && entity === "ordenes") {
+        const contract = column.options?.find((option) => String(option.value) === String(value));
+        next.id_direccion = contract?.details?.direccion_id || "";
+      }
+      if (entity === "facturas" && column.name === "id_contrato" && !editingId) {
+        const contract = column.options?.find((option) => String(option.value) === String(value));
+        next.id_periodo = "";
+        next.fecha_vencimiento = "";
+        next.total = contract?.details?.plan_precio || "";
+        next.saldo = contract?.details?.plan_precio || "";
+      }
+      if (entity === "facturas" && column.name === "id_periodo" && !editingId) {
+        const period = column.options?.find((option) => String(option.value) === String(value));
+        next.fecha_vencimiento = period?.details?.fecha_vencimiento || "";
+      }
+      if (column.name === "id_factura" && entity === "pagos" && !editingId) {
+        const invoice = column.options?.find((option) => String(option.value) === String(value));
+        next.valor = invoice?.details?.saldo || "";
+      }
+      return next;
+    });
+  };
+
   const startEdit = (row) => {
     setNotice("");
+    paymentIdempotencyKey.current = null;
     setEditingId(row[metadata.clave]);
     setValues(Object.fromEntries(formColumns.map((column) => [
       column.name,
@@ -331,6 +645,9 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
     try {
       const payload = { datos };
+      if (entity === "pagos" && !editingId) {
+        payload.idempotencia_key = paymentIdempotencyKey.current;
+      }
       if (entity === "usuarios" && password) payload.contrasena = password;
       if (entity === "clientes" && !editingId) {
         if (password.length < 8) throw new Error("La contraseña debe tener al menos 8 caracteres.");
@@ -632,6 +949,25 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     return String(value);
   };
 
+  const canDownloadDocument = ["contratos", "facturas"].includes(entity);
+  const canManageRecords = !metadata?.soloLectura && !contextReadOnly;
+  const downloadDocument = (row) => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("El navegador bloqueó la ventana del documento. Permite ventanas emergentes e inténtalo de nuevo.");
+      return;
+    }
+    setError("");
+    printWindow.document.open();
+    printWindow.document.write(buildRelatedDocument(entity, row, metadata));
+    printWindow.document.close();
+    window.setTimeout(() => {
+      if (printWindow.closed) return;
+      printWindow.focus();
+      printWindow.print();
+    }, 250);
+  };
+
   if (loading && !metadata) return <p role="status">Cargando {entity}...</p>;
 
   return (
@@ -677,18 +1013,37 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
           )}
           <div className="admin-entity-fields">
             {formColumns.map((column) => (
-              <EntityField
-                key={column.name}
-                column={column}
-                value={values[column.name] ?? ""}
-                onChange={(value) => setValues((current) => ({ ...current, [column.name]: value }))}
-                disabled={Boolean(
-                  customerId
-                  && (column.name === "id_cliente"
-                    || (entity === "notificaciones" && column.name === "id_usuario"))
-                )}
-                requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
-              />
+              (() => {
+                let fieldColumn = column;
+                if (entity === "ordenes" && column.name === "id_direccion" && values.id_contrato) {
+                  const contract = metadata.columnas
+                    .find((item) => item.name === "id_contrato")
+                    ?.options?.find((option) => String(option.value) === String(values.id_contrato));
+                  if (contract?.details?.cliente_id) {
+                    fieldColumn = {
+                      ...column,
+                      options: column.options.filter((option) =>
+                        String(option.details?.cliente_id) === String(contract.details.cliente_id)
+                      ),
+                    };
+                  }
+                }
+                return (
+                  <EntityField
+                    key={column.name}
+                    entity={entity}
+                    column={fieldColumn}
+                    value={values[column.name] ?? ""}
+                    onChange={(value) => handleFieldChange(column, value)}
+                    disabled={Boolean(
+                      customerId
+                      && (column.name === "id_cliente"
+                        || (entity === "notificaciones" && column.name === "id_usuario"))
+                    )}
+                    requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
+                  />
+                );
+              })()
             ))}
             {(entity === "usuarios" || (entity === "clientes" && !editingId)) && (
               <label className="admin-entity-field">
@@ -769,13 +1124,13 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
           <thead className="table-dark">
             <tr>
               {tableColumns.map((column) => <th key={column.name}>{humanize(column.name.replace(/^id_/, ""))}</th>)}
-              {!metadata?.soloLectura && !contextReadOnly && <th>Acciones</th>}
+              {(canManageRecords || canDownloadDocument) && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={tableColumns.length + (metadata?.soloLectura || contextReadOnly ? 0 : 1)} className="text-center text-muted">
+                <td colSpan={tableColumns.length + (canManageRecords || canDownloadDocument ? 1 : 0)} className="text-center text-muted">
                   {customerId ? "Este cliente no tiene registros en esta sección." : "No hay registros para mostrar."}
                 </td>
               </tr>
@@ -788,9 +1143,24 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                 {tableColumns.map((column) => (
                   <td key={column.name}>{renderCell(column, row)}</td>
                 ))}
-                {!metadata.soloLectura && !contextReadOnly && (
+                {(canManageRecords || canDownloadDocument) && (
                   <td>
                     <div className="d-flex justify-content-center align-items-center gap-2 flex-wrap">
+                      {canDownloadDocument && (
+                        <button
+                          type="button"
+                          className="btn btn-outline-primary btn-sm"
+                          title="Imprimir o guardar como PDF"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            downloadDocument(row);
+                          }}
+                        >
+                          Descargar PDF
+                        </button>
+                      )}
+                      {canManageRecords && (
+                        <>
                       {entity === "clientes" && (
                         <>
                           <button
@@ -823,6 +1193,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                         }}>
                           Desactivar
                         </button>
+                      )}
+                        </>
                       )}
                     </div>
                   </td>

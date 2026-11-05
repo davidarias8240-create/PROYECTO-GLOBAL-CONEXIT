@@ -260,6 +260,7 @@ CREATE TABLE pago (
         'OTRO'
     ) NOT NULL,
     referencia VARCHAR(100),
+    idempotencia_key CHAR(36) NULL,
     estado ENUM(
         'REGISTRADO',
         'ANULADO',
@@ -272,6 +273,9 @@ CREATE TABLE pago (
         REFERENCES factura(id_factura)
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
+
+    CONSTRAINT uq_pago_idempotencia_key
+        UNIQUE (idempotencia_key),
 
     CONSTRAINT chk_pago_valor
         CHECK (valor > 0)
