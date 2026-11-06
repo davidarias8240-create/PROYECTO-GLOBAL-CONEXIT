@@ -91,6 +91,10 @@ export function obtenerPlanesPublicos() {
   return request("planes/publicos.php", { credentials: "omit" });
 }
 
+export function obtenerTotalClientesActivos() {
+  return request("dashboard/clientes_publicos.php", { credentials: "omit" });
+}
+
 export function guardarRegistroEntidad(entity, data, id = null, customerId = null) {
   const query = entityQuery({ customerId });
   if (id === null) {

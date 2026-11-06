@@ -23,6 +23,13 @@ if (($data["autorizacion_tratamiento"] ?? false) !== true) {
     exit;
 }
 
+$commercialAuthorization = $data["autorizacion_comercial"] ?? false;
+if (!is_bool($commercialAuthorization)) {
+    http_response_code(400);
+    echo json_encode(["error" => "La autorización comercial debe ser verdadera o falsa"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if (!filter_var($data["email"], FILTER_VALIDATE_EMAIL)) {
     http_response_code(400);
     echo json_encode(["error" => "El correo no es válido"], JSON_UNESCAPED_UNICODE);
@@ -30,11 +37,16 @@ if (!filter_var($data["email"], FILTER_VALIDATE_EMAIL)) {
 }
 
 try {
+    $commercialAuthorizationAt = $commercialAuthorization
+        ? (new DateTimeImmutable("now", new DateTimeZone("America/Bogota")))->format(DATE_ATOM)
+        : null;
     $message = sprintf(
-        "Solicitud para el plan %s. Documento: %s. Dirección de instalación: %s. El titular autorizó el tratamiento de sus datos personales conforme a la Ley 1581 de 2012.",
+        "Solicitud para el plan %s. Documento: %s. Dirección de instalación: %s. El titular autorizó el tratamiento de sus datos personales conforme a la Ley 1581 de 2012. Autorización para fines comerciales: %s%s.",
         trim($data["plan"]),
         trim($data["documento"]),
-        trim($data["direccion"])
+        trim($data["direccion"]),
+        $commercialAuthorization ? "Sí" : "No",
+        $commercialAuthorizationAt === null ? "" : " (registrada el " . $commercialAuthorizationAt . ")"
     );
     $pdo->beginTransaction();
     $stmt = $pdo->prepare(
@@ -57,7 +69,11 @@ try {
     $audit->execute([
         ":id_entidad" => (string) $pdo->lastInsertId(),
         ":detalle" => json_encode(
-            ["tipo_solicitud" => "CONTRATACION"],
+            [
+                "tipo_solicitud" => "CONTRATACION",
+                "autorizacion_comercial" => $commercialAuthorization,
+                "autorizacion_comercial_fecha" => $commercialAuthorizationAt
+            ],
             JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
         )
     ]);

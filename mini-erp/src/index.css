@@ -517,6 +517,8 @@ textarea {
 .dashboard-stat-copy > span { color: #687891; font-size: 0.78rem; line-height: 1.3; }
 .dashboard-stat-copy > strong { max-width: 100%; overflow: hidden; color: #1e2b43; font-size: clamp(1.15rem, 1.7vw, 1.55rem); line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .dashboard-stat-copy > small { display: flex; min-height: 18px; align-items: center; color: #8a97aa; font-size: 0.7rem; }
+.dashboard-animated-number { display: inline-block; font-variant-numeric: tabular-nums; transition: filter 0.35s ease; }
+.dashboard-animated-number.is-counting { filter: blur(1px); }
 
 .dashboard-trend {
   display: inline-flex;
@@ -572,23 +574,28 @@ textarea {
 .dashboard-revenue-chart { display: block; width: 100%; height: 220px; overflow: visible; }
 .dashboard-chart-grid { stroke: #e9eff6; stroke-dasharray: 3 5; stroke-width: 1; }
 .dashboard-chart-label { fill: #8795a9; font-family: inherit; font-size: 10px; }
-.dashboard-chart-area { fill: url(#dashboard-chart-gradient); opacity: 0.18; }
-.dashboard-chart-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; }
+.dashboard-chart-area { fill: url(#dashboard-chart-gradient); opacity: 0; animation: dashboard-area-reveal 0.9s ease 0.75s forwards; }
+.dashboard-chart-line { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 3; stroke-dasharray: 1; stroke-dashoffset: 1; animation: dashboard-line-draw 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 .billed-line { stroke: #246bfd; }
-.received-line { stroke: #24b5c4; stroke-width: 2.5; }
-.dashboard-chart-point { fill: #fff; stroke: #24b5c4; stroke-width: 2; }
+.received-line { stroke: #24b5c4; stroke-width: 2.5; animation-delay: 0.18s; }
+.dashboard-chart-point { fill: #fff; stroke: #24b5c4; stroke-width: 2; opacity: 0; transform-box: fill-box; transform-origin: center; animation: dashboard-point-pop 0.35s ease-out forwards; }
 .dashboard-chart-point:focus { outline: none; stroke-width: 4; }
+@keyframes dashboard-line-draw { to { stroke-dashoffset: 0; } }
+@keyframes dashboard-area-reveal { to { opacity: 0.18; } }
+@keyframes dashboard-point-pop { from { opacity: 0; transform: scale(0.25); } to { opacity: 1; transform: scale(1); } }
+@keyframes dashboard-donut-enter { from { opacity: 0; transform: rotate(-70deg) scale(0.72); } to { opacity: 1; transform: rotate(0) scale(1); } }
 
 .dashboard-collections-total { margin: 24px 20px 3px; color: #1e2b43; font-size: clamp(1.7rem, 3vw, 2.2rem); font-weight: 800; letter-spacing: -0.03em; }
 .dashboard-collections-caption { margin: 0 20px; color: #71809a; font-size: 0.78rem; }
 .dashboard-collections-track { height: 8px; margin: 24px 20px 12px; overflow: hidden; border-radius: 10px; background: #f2f4f8; }
-.dashboard-collections-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f6a12b, #ec5375); }
+.dashboard-collections-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f6a12b, #ec5375); transform: scaleX(0); transform-origin: left; animation: dashboard-bar-fill 1s cubic-bezier(0.22, 1, 0.36, 1) 0.25s forwards; }
+@keyframes dashboard-bar-fill { to { transform: scaleX(1); } }
 .dashboard-collections-note { margin: 0 20px 20px; color: #8b97a8; font-size: 0.71rem; line-height: 1.5; }
 
 .dashboard-plans-panel,
 .dashboard-support-panel { min-height: 286px; }
 .dashboard-plan-content { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1.2fr); align-items: center; gap: 18px; padding: 22px; }
-.dashboard-donut { display: grid; width: min(100%, 180px); aspect-ratio: 1; place-items: center; margin: auto; border-radius: 50%; }
+.dashboard-donut { display: grid; width: min(100%, 180px); aspect-ratio: 1; place-items: center; margin: auto; border-radius: 50%; animation: dashboard-donut-enter 0.9s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .dashboard-donut > div { display: flex; width: 62%; aspect-ratio: 1; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%; background: #fff; }
 .dashboard-donut strong { color: #1e2b43; font-size: 1.6rem; line-height: 1; }
 .dashboard-donut span { margin-top: 6px; color: #8390a3; font-size: 0.67rem; }
@@ -639,6 +646,16 @@ textarea {
 .dashboard-manage-link { display: inline-block; padding: 7px 10px; border-radius: 7px; color: #246bfd; background: #edf4ff; font-size: 0.69rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
 .dashboard-manage-link:hover { background: #e0ebff; }
 .dashboard-overdue-panel { margin-bottom: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-animated-number { transition: none; }
+  .dashboard-animated-number.is-counting { filter: none; }
+  .dashboard-chart-area { animation: none; opacity: 0.18; }
+  .dashboard-chart-line { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+  .dashboard-chart-point { animation: none; opacity: 1; }
+  .dashboard-donut { animation: none; }
+  .dashboard-collections-track span { animation: none; transform: scaleX(1); }
+}
 
 @media (max-width: 1100px) {
   .dashboard-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -967,7 +984,9 @@ main > * {
 .checkout-fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .checkout-consent { display: flex; align-items: flex-start; gap: 10px; margin: 2px 0 14px; color: #625c56; font-size: 13px; line-height: 1.5; }
 .checkout-consent input { flex: 0 0 17px; width: 17px; height: 17px; margin: 2px 0 0; accent-color: #16884a; cursor: pointer; }
-.checkout-consent span { cursor: pointer; }
+.checkout-consent span { cursor: pointer; text-align: justify; }
+.checkout-consent-commercial { margin-top: 0; }
+.checkout-consent-commercial strong { color: #39342f; }
 .checkout-submit { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 7px; padding: 12px 18px; border: 0; border-radius: 12px; background: #191918; color: #fff; font: inherit; font-size: 15px; font-weight: 800; text-decoration: none; cursor: pointer; }
 .checkout-submit:disabled { cursor: wait; opacity: .65; }
 .checkout-note { margin: 12px 0 0; color: #83796f; font-size: 12px; line-height: 1.5; text-align: center; }

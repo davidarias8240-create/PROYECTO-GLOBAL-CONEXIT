@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { obtenerResumenDashboard } from "../services/api";
 
@@ -27,11 +27,78 @@ function shortCurrency(value) {
   return currency.format(amount);
 }
 
+function percentFormat(value) {
+  return value.toLocaleString("es-CO", { maximumFractionDigits: 1 });
+}
+
+function numberFormat(value) {
+  return number.format(value);
+}
+
+function currencyFormat(value) {
+  return currency.format(value);
+}
+
 function dateLabel(value, options = { day: "numeric", month: "short" }) {
   if (!value) return "Por programar";
   const date = new Date(`${String(value).replace(" ", "T").slice(0, 10)}T12:00:00`);
   if (Number.isNaN(date.getTime())) return "Fecha no disponible";
   return new Intl.DateTimeFormat("es-CO", options).format(date);
+}
+
+function AnimatedNumber({ value, format = number.format, suffix = "", className }) {
+  const [count, setCount] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const numberRef = useRef(null);
+  const reducedMotion = typeof window !== "undefined"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  useEffect(() => {
+    const element = numberRef.current;
+    if (!element || reducedMotion) return;
+
+    let frameId;
+    const animate = () => {
+      setIsAnimating(true);
+      let startTime;
+      const duration = 1500;
+      const update = (timestamp) => {
+        if (startTime === undefined) startTime = timestamp;
+        const progress = Math.min((timestamp - startTime) / duration, 1);
+        const easedProgress = 1 - (1 - progress) ** 4;
+        setCount(value * easedProgress);
+        if (progress < 1) frameId = window.requestAnimationFrame(update);
+        else {
+          setCount(value);
+          setIsAnimating(false);
+        }
+      };
+      frameId = window.requestAnimationFrame(update);
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      animate();
+    } else {
+      const observer = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        observer.disconnect();
+        animate();
+      }, { threshold: 0.5 });
+      observer.observe(element);
+      return () => {
+        observer.disconnect();
+        window.cancelAnimationFrame(frameId);
+      };
+    }
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [reducedMotion, value]);
+
+  return (
+    <span ref={numberRef} className={`dashboard-animated-number${isAnimating ? " is-counting" : ""}${className ? ` ${className}` : ""}`}>
+      {format(reducedMotion ? value : count)}{suffix}
+    </span>
+  );
 }
 
 function StatCard({ title, value, detail, icon, tone }) {
@@ -40,7 +107,7 @@ function StatCard({ title, value, detail, icon, tone }) {
       <div className={`dashboard-stat-icon ${tone}`} aria-hidden="true">{icon}</div>
       <div className="dashboard-stat-copy">
         <span>{title}</span>
-        <strong>{value}</strong>
+        <strong><AnimatedNumber value={value.amount} format={value.format} /></strong>
         <small>{detail}</small>
       </div>
     </article>
@@ -52,7 +119,7 @@ function TrendBadge({ value }) {
   const isPositive = value >= 0;
   return (
     <span className={`dashboard-trend ${isPositive ? "positive" : "negative"}`}>
-      {isPositive ? "+" : ""}{value.toLocaleString("es-CO", { maximumFractionDigits: 1 })}%
+      {value < 0 ? "-" : isPositive ? "+" : ""}<AnimatedNumber value={Math.abs(value)} format={percentFormat} suffix="%" />
     </span>
   );
 }
@@ -70,9 +137,19 @@ function RevenueChart({ months }) {
     y: padding.top + chartHeight - ((Number(item[key]) || 0) / maximum) * chartHeight,
     value: Number(item[key]) || 0,
   }));
-  const linePath = (points) => points
-    .map(({ x, y }, index) => `${index === 0 ? "M" : "L"} ${x} ${y}`)
-    .join(" ");
+  const linePath = (points) => {
+    if (points.length < 2) return points.map(({ x, y }) => `M ${x} ${y}`).join(" ");
+    return points.slice(1).reduce((path, point, index) => {
+      const previous = points[index];
+      const beforePrevious = points[Math.max(0, index - 1)];
+      const next = points[index + 2] || point;
+      const control1X = previous.x + (point.x - beforePrevious.x) / 6;
+      const control1Y = previous.y + (point.y - beforePrevious.y) / 6;
+      const control2X = point.x - (next.x - previous.x) / 6;
+      const control2Y = point.y - (next.y - previous.y) / 6;
+      return `${path} C ${control1X} ${control1Y}, ${control2X} ${control2Y}, ${point.x} ${point.y}`;
+    }, `M ${points[0].x} ${points[0].y}`);
+  };
   const billed = coordinates("facturado");
   const received = coordinates("recaudado");
 
@@ -107,10 +184,10 @@ function RevenueChart({ months }) {
             d={`${linePath(billed)} L ${billed.at(-1)?.x ?? padding.left} ${padding.top + chartHeight} L ${billed[0]?.x ?? padding.left} ${padding.top + chartHeight} Z`}
             className="dashboard-chart-area"
           />
-          <path d={linePath(billed)} className="dashboard-chart-line billed-line" />
-          <path d={linePath(received)} className="dashboard-chart-line received-line" />
+          <path d={linePath(billed)} pathLength="1" className="dashboard-chart-line billed-line" />
+          <path d={linePath(received)} pathLength="1" className="dashboard-chart-line received-line" />
           {received.map((point, index) => (
-            <circle key={months[index].mes} cx={point.x} cy={point.y} r="3.5" className="dashboard-chart-point" tabIndex="0">
+            <circle key={months[index].mes} cx={point.x} cy={point.y} r="3.5" className="dashboard-chart-point" style={{ animationDelay: `${0.8 + index * 0.06}s` }} tabIndex="0">
               <title>{`${months[index].mes}: ${currency.format(point.value)} recaudados`}</title>
             </circle>
           ))}
@@ -148,7 +225,7 @@ function PlanDistribution({ plans }) {
         role="img"
         aria-label={`Distribución de ${number.format(total)} contratos activos por plan`}
       >
-        <div><strong>{number.format(total)}</strong><span>contratos</span></div>
+        <div><strong><AnimatedNumber value={total} /></strong><span>contratos</span></div>
       </div>
       <ul className="dashboard-plan-legend">
         {plans.length === 0 ? (
@@ -157,8 +234,8 @@ function PlanDistribution({ plans }) {
           <li key={plan.nombre}>
             <i style={{ backgroundColor: chartColors[index % chartColors.length] }} />
             <span className="dashboard-plan-name"><strong>{plan.nombre}</strong><small>{plan.velocidad}</small></span>
-            <b>{number.format(plan.contratos)}</b>
-            <em>{total ? `${((plan.contratos / total) * 100).toLocaleString("es-CO", { maximumFractionDigits: 1 })}%` : "0%"}</em>
+            <b><AnimatedNumber value={Number(plan.contratos)} /></b>
+            <em><AnimatedNumber value={total ? (Number(plan.contratos) / total) * 100 : 0} format={percentFormat} suffix="%" /></em>
           </li>
         ))}
       </ul>
@@ -213,26 +290,26 @@ function Dashboard() {
     const summary = data.resumen;
     const openTickets = summary.tickets.ABIERTO + summary.tickets.EN_PROCESO + summary.tickets.PENDIENTE;
     return [
-      { title: "Total de clientes", value: number.format(summary.clientes.total), detail: `${number.format(summary.clientes.activos)} activos`, icon: "◎", tone: "blue" },
-      { title: "Contratos activos", value: number.format(summary.contratosActivos), detail: "Servicios en operación", icon: "✓", tone: "green" },
+      { title: "Total de clientes", value: { amount: summary.clientes.total, format: numberFormat }, detail: <><AnimatedNumber value={summary.clientes.activos} /> activos</>, icon: "◎", tone: "blue" },
+      { title: "Contratos activos", value: { amount: summary.contratosActivos, format: numberFormat }, detail: "Servicios en operación", icon: "✓", tone: "green" },
       {
         title: "Facturación del mes",
-        value: shortCurrency(summary.facturadoMes),
+        value: { amount: summary.facturadoMes, format: shortCurrency },
         detail: <TrendBadge value={percentChange(summary.facturadoMes, summary.facturadoMesAnterior)} />,
         icon: "$",
         tone: "purple",
       },
       {
         title: "Pagos recibidos",
-        value: shortCurrency(summary.recaudadoMes),
+        value: { amount: summary.recaudadoMes, format: shortCurrency },
         detail: <TrendBadge value={percentChange(summary.recaudadoMes, summary.recaudadoMesAnterior)} />,
         icon: "↗",
         tone: "cyan",
       },
-      { title: "Facturas vencidas", value: number.format(summary.facturasVencidas), detail: `${currency.format(summary.saldoVencido)} por cobrar`, icon: "!", tone: "orange" },
-      { title: "Tickets sin cerrar", value: number.format(openTickets), detail: `${number.format(summary.tickets.ABIERTO)} abiertos`, icon: "?", tone: "pink" },
-      { title: "Órdenes pendientes", value: number.format(summary.ordenesPendientes), detail: "Pendientes o programadas", icon: "⌁", tone: "amber" },
-      { title: "Solicitudes nuevas", value: number.format(summary.solicitudesPendientes), detail: "Requieren seguimiento", icon: "＋", tone: "indigo" },
+      { title: "Facturas vencidas", value: { amount: summary.facturasVencidas, format: numberFormat }, detail: <><AnimatedNumber value={summary.saldoVencido} format={currencyFormat} /> por cobrar</>, icon: "!", tone: "orange" },
+      { title: "Tickets sin cerrar", value: { amount: openTickets, format: numberFormat }, detail: <><AnimatedNumber value={summary.tickets.ABIERTO} /> abiertos</>, icon: "?", tone: "pink" },
+      { title: "Órdenes pendientes", value: { amount: summary.ordenesPendientes, format: numberFormat }, detail: "Pendientes o programadas", icon: "⌁", tone: "amber" },
+      { title: "Solicitudes nuevas", value: { amount: summary.solicitudesPendientes, format: numberFormat }, detail: "Requieren seguimiento", icon: "＋", tone: "indigo" },
     ];
   }, [data]);
 
@@ -284,8 +361,8 @@ function Dashboard() {
                 <div><h2>Cartera vencida</h2><p>Saldo de facturas con vencimiento superado</p></div>
                 <Link to="/facturas">Gestionar <span aria-hidden="true">›</span></Link>
               </div>
-              <div className="dashboard-collections-total">{currency.format(data.resumen.saldoVencido)}</div>
-              <div className="dashboard-collections-caption">{number.format(data.resumen.facturasVencidas)} facturas requieren seguimiento</div>
+              <div className="dashboard-collections-total"><AnimatedNumber value={data.resumen.saldoVencido} format={currencyFormat} /></div>
+              <div className="dashboard-collections-caption"><AnimatedNumber value={data.resumen.facturasVencidas} /> facturas requieren seguimiento</div>
               <div className="dashboard-collections-track"><span style={{ width: `${data.resumen.facturasVencidas ? 100 : 0}%` }} /></div>
               <p className="dashboard-collections-note">El detalle de facturas vencidas aparece al final del panel.</p>
             </article>
@@ -309,13 +386,13 @@ function Dashboard() {
                   ["CERRADO", "Cerrados", "green"],
                 ].map(([key, label, tone]) => (
                   <div className={`dashboard-ticket-state ${tone}`} key={key}>
-                    <strong>{number.format(data.resumen.tickets[key])}</strong><span>{label}</span>
+                    <strong><AnimatedNumber value={data.resumen.tickets[key]} /></strong><span>{label}</span>
                   </div>
                 ))}
               </div>
               <div className="dashboard-support-foot">
                 <span>Solicitudes de servicio pendientes</span>
-                <strong>{number.format(data.resumen.solicitudesPendientes)}</strong>
+                <strong><AnimatedNumber value={data.resumen.solicitudesPendientes} /></strong>
               </div>
             </article>
           </div>
@@ -367,7 +444,7 @@ function Dashboard() {
                 { key: "numero", label: "Factura", render: (row) => <strong>{row.numero}</strong> },
                 { key: "cliente", label: "Cliente", render: (row) => row.cliente },
                 { key: "vencimiento", label: "Vencimiento", render: (row) => dateLabel(row.fecha_vencimiento, { day: "numeric", month: "short", year: "numeric" }) },
-                { key: "saldo", label: "Saldo", render: (row) => <strong>{currency.format(row.saldo)}</strong> },
+                { key: "saldo", label: "Saldo", render: (row) => <strong><AnimatedNumber value={Number(row.saldo)} format={currencyFormat} /></strong> },
                 { key: "estado", label: "Estado", render: () => <span className="dashboard-status status-vencida">Vencida</span> },
                 { key: "accion", label: "Acción", render: (row) => <Link className="dashboard-manage-link" to="/facturas" aria-label={`Gestionar factura ${row.numero}`}>Gestionar</Link> },
               ]}

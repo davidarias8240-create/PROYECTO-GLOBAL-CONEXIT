@@ -20,6 +20,7 @@ function PlanCheckout({ plan, onClose }) {
 			direccion: String(formValues.direccion).trim(),
 			plan: plan.name,
 			autorizacion_tratamiento: formValues.autorizacionTratamiento === "on",
+			autorizacion_comercial: formValues.autorizacionComercial === "on",
 		};
 
 		try {
@@ -78,6 +79,13 @@ function PlanCheckout({ plan, onClose }) {
 						<label className="checkout-consent">
 							<input name="autorizacionTratamiento" type="checkbox" required />
 							<span>Autorizo el tratamiento de mis datos personales conforme a la Ley 1581 de 2012 para gestionar esta solicitud y contactarme sobre el servicio.</span>
+						</label>
+						<label className="checkout-consent checkout-consent-commercial">
+							<input name="autorizacionComercial" type="checkbox" />
+							<span>
+								<strong>Autorización opcional para fines comerciales.</strong>{" "}
+								Autorizo a Global Conexit a tratar mis datos para enviarme información comercial y publicitaria sobre sus productos, planes, ofertas y promociones por correo, teléfono o WhatsApp. Esta autorización es voluntaria, no condiciona mi solicitud y puedo revocarla a través de los canales de atención.
+							</span>
 						</label>
 						{error && <p className="checkout-error" role="alert">{error}</p>}
 						<button className="checkout-submit" type="submit" disabled={isSubmitting}>
