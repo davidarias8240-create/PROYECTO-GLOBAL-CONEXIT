@@ -1151,49 +1151,68 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                           type="button"
                           className="btn btn-outline-primary btn-sm"
                           title="Imprimir o guardar como PDF"
+                          aria-label="Imprimir o guardar como PDF"
                           onClick={(event) => {
                             event.stopPropagation();
                             downloadDocument(row);
                           }}
                         >
-                          Descargar PDF
+                          <i className="bi bi-file-earmark-pdf" aria-hidden="true" />
                         </button>
                       )}
                       {canManageRecords && (
                         <>
-                      {entity === "clientes" && (
-                        <>
+                          {entity === "clientes" && (
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn-info btn-sm text-white"
+                                title="Ver detalle"
+                                aria-label="Ver detalle"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openCustomerDetail(row);
+                                }}
+                              >
+                                <i className="bi bi-eye" aria-hidden="true" />
+                              </button>
+                              <Link
+                                className="btn btn-outline-info btn-sm"
+                                to={`/clientes/${row[metadata.clave]}`}
+                                title="Gestionar cliente"
+                                aria-label="Gestionar cliente"
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <i className="bi bi-gear" aria-hidden="true" />
+                              </Link>
+                            </>
+                          )}
                           <button
                             type="button"
-                            className="btn btn-info btn-sm text-white"
+                            className="btn btn-warning btn-sm"
+                            title="Editar"
+                            aria-label="Editar"
                             onClick={(event) => {
                               event.stopPropagation();
-                              openCustomerDetail(row);
+                              startEdit(row);
                             }}
                           >
-                            Ver detalle
+                            <i className="bi bi-pencil" aria-hidden="true" />
                           </button>
-                          <Link
-                            className="btn btn-outline-info btn-sm"
-                            to={`/clientes/${row[metadata.clave]}`}
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            Gestionar
-                          </Link>
-                        </>
-                      )}
-                      <button type="button" className="btn btn-warning btn-sm" onClick={(event) => {
-                        event.stopPropagation();
-                        startEdit(row);
-                      }}>Editar</button>
-                      {metadata.archivable && (
-                        <button type="button" className="btn btn-outline-danger btn-sm" onClick={(event) => {
-                          event.stopPropagation();
-                          handleArchive(row);
-                        }}>
-                          Desactivar
-                        </button>
-                      )}
+                          {metadata.archivable && (
+                            <button
+                              type="button"
+                              className="btn btn-outline-danger btn-sm"
+                              title="Desactivar"
+                              aria-label="Desactivar"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleArchive(row);
+                              }}
+                            >
+                              <i className="bi bi-toggle-off" aria-hidden="true" />
+                            </button>
+                          )}
                         </>
                       )}
                     </div>
