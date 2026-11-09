@@ -3,12 +3,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import ToastMessage from "../components/ToastMessage";
+import useTheme from "../hooks/useTheme";
 import { verificarSesionAdmin } from "../services/api";
 
 function DashboardLayout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
     const [authorized, setAuthorized] = useState(false);
+    const [theme, toggleTheme] = useTheme();
     const [welcomeMessage, setWelcomeMessage] = useState(
         () => location.state?.welcome ? "¡Bienvenido de nuevo a Global Conexit!" : ""
     );
@@ -31,11 +33,11 @@ function DashboardLayout({ children }) {
     }
 
     return (
-        <div className="admin-shell d-flex">
+        <div className="admin-shell d-flex" data-theme={theme}>
             <ToastMessage message={welcomeMessage} onClose={dismissWelcome} />
             <Sidebar />
             <div className="admin-content flex-grow-1">
-                <Navbar />
+                <Navbar theme={theme} onThemeToggle={toggleTheme} />
                 <main className="p-4">{children}</main>
             </div>
         </div>
