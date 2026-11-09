@@ -3,6 +3,8 @@ import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 import Formcliente from "../components/Formcliente";
 import PlanCheckout from "../components/PlanCheckout";
+import ThemeToggle from "../components/ThemeToggle";
+import useTheme from "../hooks/useTheme";
 import { obtenerPlanesPublicos, obtenerTotalClientesActivos } from "../services/api";
 
 function AnimatedStat({ value, prefix = "", suffix = "", decimals = 0 }) {
@@ -100,6 +102,7 @@ function Home() {
 	const speedTestRef = useRef(null);
 	const speedTestSectionRef = useRef(null);
 	const speedTestStartedRef = useRef(false);
+	const [theme, toggleTheme] = useTheme();
 	const [showClientLogin, setShowClientLogin] = useState(false);
 	const [selectedPlan, setSelectedPlan] = useState(null);
 	const [plansState, setPlansState] = useState({ status: "loading", items: [], error: "" });
@@ -278,11 +281,11 @@ function Home() {
 	const gaugeAngle = Math.min(90, Math.max(-90, -90 + (gaugeValue / 700) * 180));
 
 	return (
-		<div className="landing-page" ref={landingPageRef}>
+		<div className="landing-page" data-theme={theme} ref={landingPageRef}>
 			{showClientLogin && <Formcliente onClose={() => setShowClientLogin(false)} />}
 			{selectedPlan && <PlanCheckout plan={selectedPlan} onClose={() => setSelectedPlan(null)} />}
 			<style>{`
-				.landing-page { --ink:#181817; --orange:#ef7410; --gold:#ffb91f; --cream:#f5efdf; --paper:#fffdfa; --muted:#766e67; min-height:100vh; color:var(--ink); background:var(--cream); font-family:"Inter", Arial, sans-serif; overflow-x:clip; }
+				.landing-page { --ink:var(--gc-ink); --orange:#ef7410; --gold:#ffb91f; --cream:var(--gc-page-bg); --paper:var(--gc-paper); --muted:var(--gc-muted); min-height:100vh; color:var(--gc-text); background:var(--gc-page-bg); font-family:"Inter", Arial, sans-serif; overflow-x:clip; transition:background-color .35s ease, color .35s ease; }
 				.landing-page * { box-sizing:border-box; }
 				.landing-page h1, .landing-page h2, .landing-page h3, .landing-page h4, .landing-page h5 { font-family:"Exo 2", "Inter", sans-serif; }
 				.landing-page .hero-stats strong, .landing-page .price, .landing-page .popular, .landing-page .gauge-value, .landing-page .meter-stats strong { font-family:"Exo 2", "Inter", sans-serif; font-variant-numeric:tabular-nums; }
@@ -417,12 +420,59 @@ function Home() {
 				.admin-access:hover, .admin-access:focus-visible { opacity:1; transform:translateY(0); outline:2px solid var(--gold); outline-offset:3px; }
 				@media (prefers-reduced-motion: reduce) { .scroll-reveal, .scroll-reveal.is-visible { opacity:1; translate:none; filter:none; transition:none; } .hero::after, .hero-visual img, .meter::after { animation:none; } .hero-visual img, .plan, .plan .primary-button, .portal-button, .primary-button, .meter, .benefit, .benefit-icon, .portal-card, .portal-icon, .portal-card::before, .footer-grid > div, .footer a, .landing-logo { transition:none; } .hero-visual:hover img, .plan:not(.featured):hover, .plan:not(.featured):focus-within, .plan.featured:hover, .plan.featured:focus-within, .plan:hover .primary-button, .plan:focus-within .primary-button, .portal-card:hover, .benefit:hover, .footer-grid > div:hover, .footer a:hover { transform:none; translate:none; } }
 				@media (max-width:800px) { .landing-nav { height:78px; gap:12px; padding:0 18px; } .landing-logo { width:158px; height:60px; } .landing-links { display:none; } .portal-button { padding:11px 16px; font-size:13px; } .hero-inner { padding:48px 22px 55px; } .hero-layout { grid-template-columns:1fr; gap:34px; } .hero h1 { font-size:52px; } .hero-visual { min-height:300px; } .hero-visual img { min-height:300px; } .plans, .diagnostic-grid, .portal-cards, .footer-grid { grid-template-columns:1fr; } .plan.featured { transform:none; } .diagnostic-grid { gap:35px; } .diagnostic-copy .section-title { font-size:38px; } .portal-banner { margin:35px 0 0; padding:30px 24px; flex-direction:column; align-items:flex-start; } .footer-bottom { flex-direction:column; } }
+				.landing-nav, .hero, .section, .footer { transition:background-color .35s ease, border-color .35s ease, color .35s ease; }
+				.landing-links a, .hero h1, .hero p, .hero-stats strong, .hero-stats span, .section-title, .section-subtitle, .eyebrow, .plan h3, .plan li, .meter-label, .gauge-value, .meter-stats, .speed-status, .benefit strong, .benefit span, .portal-card-title, .portal-card-copy, .footer p, .footer a, .footer h3 { transition:color .3s ease; }
+				.plan { transition:background-color .35s ease, color .35s ease, transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s ease, border-color .35s ease; }
+				.meter { transition:background-color .35s ease, color .35s ease, border-color .35s ease, transform .35s ease, box-shadow .35s ease; }
+				.benefit { transition:background-color .3s ease, color .3s ease, border-color .3s ease, transform .3s ease, box-shadow .3s ease; }
+				.portal-card { transition:background-color .32s ease, color .32s ease, border-color .32s ease, transform .32s cubic-bezier(.2,.7,.2,1), box-shadow .32s ease; }
+				.landing-page[data-theme="dark"] { color:var(--gc-text); background:var(--gc-page-bg); }
+				.landing-page[data-theme="dark"] .landing-nav { background:rgba(37,41,44,.94); border-bottom-color:var(--gc-border); box-shadow:0 8px 26px #00000030; }
+				.landing-page[data-theme="dark"] .landing-logo { filter:brightness(0) invert(1); }
+				.landing-page[data-theme="dark"] .landing-logo:hover { filter:brightness(0) invert(1) drop-shadow(0 5px 5px #ef741066); }
+				.landing-page[data-theme="dark"] .landing-links a { color:#c8c2bc; }
+				.landing-page[data-theme="dark"] .landing-links a:hover, .landing-page[data-theme="dark"] .landing-links a:focus-visible { color:#fff; }
+				.landing-page[data-theme="dark"] .theme-toggle { background:#303538; border-color:#4b5052; color:#ffc05a; }
+				.landing-page[data-theme="dark"] .hero { background:radial-gradient(ellipse at 17% 75%,#ef74101c 0,transparent 30%),radial-gradient(ellipse at 83% 30%,#ffffff0a 0,transparent 38%),#23272a; }
+				.landing-page[data-theme="dark"] .hero::before { opacity:.42; background-image:linear-gradient(#ef74101c 1px,transparent 1px),linear-gradient(90deg,#ef74101c 1px,transparent 1px),radial-gradient(circle at 72% 48%,#ffb91f20 0,transparent 22%); }
+				.landing-page[data-theme="dark"] .hero p, .landing-page[data-theme="dark"] .section-subtitle { color:#c0b9b2; }
+				.landing-page[data-theme="dark"] .hero-stats span, .landing-page[data-theme="dark"] .meter-label, .landing-page[data-theme="dark"] .gauge-value small, .landing-page[data-theme="dark"] .meter-stats, .landing-page[data-theme="dark"] .speed-status { color:#aaa39c; }
+				.landing-page[data-theme="dark"] .section { background-color:var(--gc-page-bg); background-image:linear-gradient(#ef741012 1px,transparent 1px),linear-gradient(90deg,#ef741012 1px,transparent 1px),radial-gradient(rgba(255,255,255,.045) 1px,transparent 1px); }
+				.landing-page[data-theme="dark"] .section::after { border-color:#ef741026; box-shadow:0 0 0 22px #ef74100c,0 0 0 46px #ef741008; }
+				.landing-page[data-theme="dark"] .eyebrow { background:#3a2b20; border-color:#674122; }
+				.landing-page[data-theme="dark"] .plan { background:var(--gc-surface); border-color:var(--gc-border); box-shadow:0 12px 24px #00000026; }
+				.landing-page[data-theme="dark"] .plan.featured { background:#191c1e; border-color:#4a3a2a; color:#f7f3ef; box-shadow:0 16px 34px #00000040,0 0 24px #ef741014; }
+				.landing-page[data-theme="dark"] .plan:not(.featured):hover, .landing-page[data-theme="dark"] .plan:not(.featured):focus-within { border-color:#ef741077; box-shadow:0 22px 38px #00000040; }
+				.landing-page[data-theme="dark"] .plan ul { border-color:#45494b; }
+				.landing-page[data-theme="dark"] .plan li { color:#d0cbc5; }
+				.landing-page[data-theme="dark"] .featured li { color:#e7e1d8; }
+				.landing-page[data-theme="dark"] .speed span { background:#3b2b20; }
+				.landing-page[data-theme="dark"] .featured .speed span { background:#493d14; }
+				.landing-page[data-theme="dark"] .plans-message { color:var(--gc-muted); }
+				.landing-page[data-theme="dark"] .diagnostic { background-color:#222629; }
+				.landing-page[data-theme="dark"] .meter { background:radial-gradient(circle at 50% 0,#ffb91f12,transparent 44%),#292e31; border-color:var(--gc-border); box-shadow:0 12px 24px #00000030; }
+				.landing-page[data-theme="dark"] .gauge-track { stroke:#52575a; }
+				.landing-page[data-theme="dark"] .gauge-needle, .landing-page[data-theme="dark"] .gauge-center { background:#f2efeb; }
+				.landing-page[data-theme="dark"] .benefit { background:#292e31; border-color:#43484a; }
+				.landing-page[data-theme="dark"] .benefit:hover { background:#332b24; border-color:#ef741077; }
+				.landing-page[data-theme="dark"] .portal-card { background:linear-gradient(145deg,#2b3033,#25292c); border-color:#414649; box-shadow:0 9px 20px #00000024; color:#f2efeb; }
+				.landing-page[data-theme="dark"] .portal-card-copy { color:#c0b9b2; }
+				.landing-page[data-theme="dark"] .portal-card:hover .portal-card-copy { color:#f2efeb; }
+				.landing-page[data-theme="dark"] .portal-icon { background:#3a2b20; }
+				.landing-page[data-theme="dark"] .portal-banner { background:#191c1e; box-shadow:0 0 32px #ef741012; }
+				.landing-page[data-theme="dark"] .footer { background:#191c1e; border-top-color:#34393b; }
+				.landing-page[data-theme="dark"] .footer-bottom { border-top-color:#414649; }
+				.landing-page[data-theme="dark"] .admin-access { background:#191c1e; }
+				@media (max-width:800px) { .landing-nav { gap:8px; padding:0 12px; } .landing-logo { width:clamp(108px, 33vw, 150px); height:58px; } .portal-button { padding:10px 11px; font-size:12px; } }
+				@media (max-width:380px) { .landing-nav { gap:6px; padding:0 10px; } .landing-logo { width:clamp(92px, 28vw, 108px); } .portal-button { padding:9px 8px; font-size:11px; } }
+				@media (prefers-reduced-motion: reduce) { .theme-toggle, .theme-toggle svg, .landing-nav, .hero, .section, .footer, .landing-links a, .hero h1, .hero p, .hero-stats strong, .hero-stats span, .section-title, .section-subtitle, .eyebrow, .plan, .plan h3, .plan li, .meter, .meter-label, .gauge-value, .meter-stats, .speed-status, .benefit, .benefit strong, .benefit span, .portal-card, .portal-card-title, .portal-card-copy, .footer p, .footer a, .footer h3 { transition:none; } }
 			`}</style>
 
 			<header className="landing-nav">
 				<img className="landing-logo" src={logo} alt="Global Conexit" />
 				<nav className="landing-links"><a href="#inicio">Inicio</a><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
 				<button className="portal-button" type="button" onClick={() => setShowClientLogin(true)}>♟&nbsp; Mi Portal / Ingresar</button>
+				<ThemeToggle theme={theme} onToggle={toggleTheme} />
 			</header>
 
 			<main>

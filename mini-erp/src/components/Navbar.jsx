@@ -1,12 +1,16 @@
 import NotificationBell from "./NotificationBell";
+import ThemeToggle from "./ThemeToggle";
 
-function Navbar() {
+function Navbar({ theme, onThemeToggle }) {
     return (
         <nav className="navbar">
             <span className="navbar-brand">
                 Panel Administrativo
             </span>
-            <NotificationBell />
+            <div className="navbar-actions">
+                <NotificationBell />
+                <ThemeToggle theme={theme} onToggle={onThemeToggle} />
+            </div>
         </nav>
     );
 }

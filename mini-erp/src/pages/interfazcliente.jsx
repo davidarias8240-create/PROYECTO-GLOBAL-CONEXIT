@@ -7,7 +7,9 @@ import {
 	pagarFacturaSimulada,
 	reportarFallaCliente,
 } from "../services/api";
+import ThemeToggle from "../components/ThemeToggle";
 import ToastMessage from "../components/ToastMessage";
+import useTheme from "../hooks/useTheme";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
@@ -111,18 +113,26 @@ function ClientSidebar({ currentView, setCurrentView, perfil, facturas }) {
 	);
 }
 
-function ClientHeader({ title, subtitle }) {
-	return <header className="client-header"><div><h1>{title}</h1><p>{subtitle}</p></div><StatusPill /></header>;
+function ClientHeader({ title, subtitle, theme, onThemeToggle }) {
+	return (
+		<header className="client-header">
+			<div><h1>{title}</h1><p>{subtitle}</p></div>
+			<div className="client-header-actions">
+			<StatusPill />
+			<ThemeToggle theme={theme} onToggle={onThemeToggle} />
+			</div>
+		</header>
+	);
 }
 
 function Info({ label, value }) {
 	return <div><small>{label}</small><strong>{value || "No registrado"}</strong></div>;
 }
 
-function ProfileView({ perfil }) {
+function ProfileView({ perfil, theme, onThemeToggle }) {
 	return (
 		<>
-			<ClientHeader title="Mi cuenta" subtitle="Información personal y estado de tu cuenta" />
+			<ClientHeader title="Mi cuenta" subtitle="Información personal y estado de tu cuenta" theme={theme} onThemeToggle={onThemeToggle} />
 			<section className="dashboard-card equipment-card">
 				<h3>Datos personales</h3>
 				<div className="equipment-grid">
@@ -151,10 +161,10 @@ function NoContractNotice() {
 	</section>;
 }
 
-function PlanView({ contrato }) {
+function PlanView({ contrato, theme, onThemeToggle }) {
 	return (
 		<>
-			<ClientHeader title="Mi Plan" subtitle="Información de tu contrato y servicio registrado" />
+			<ClientHeader title="Mi Plan" subtitle="Información de tu contrato y servicio registrado" theme={theme} onThemeToggle={onThemeToggle} />
 			{!contrato ? <NoContractNotice /> : (
 				<section className="plan-hero">
 					<div className="plan-hero-top">
@@ -178,7 +188,7 @@ function PlanView({ contrato }) {
 	);
 }
 
-function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentView }) {
+function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentView, theme, onThemeToggle }) {
 	const [filtro, setFiltro] = useState("todas");
 	const visibles = facturas.filter((factura) => {
 		return filtro === "todas" || factura.estado === filtro;
@@ -186,7 +196,7 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 
 	return (
 		<>
-			<ClientHeader title="Mis Facturas" subtitle="Facturas reales asociadas a tus contratos" />
+			<ClientHeader title="Mis Facturas" subtitle="Facturas reales asociadas a tus contratos" theme={theme} onThemeToggle={onThemeToggle} />
 			<div className="invoice-metrics">
 				<Info label="FACTURAS REGISTRADAS" value={facturas.length} />
 				<Info label="PENDIENTE DE PAGO" value={formatMoney(resumen.pendiente)} />
@@ -231,7 +241,7 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 	);
 }
 
-function PaymentView({ factura, onPay }) {
+function PaymentView({ factura, onPay, theme, onThemeToggle }) {
 	const [metodo, setMetodo] = useState("TARJETA");
 	const [mensaje, setMensaje] = useState("");
 	const [error, setError] = useState("");
@@ -255,7 +265,7 @@ function PaymentView({ factura, onPay }) {
 
 	return (
 		<>
-			<ClientHeader title="Pagar Factura" subtitle="Consulta el saldo pendiente asociado a tu factura" />
+			<ClientHeader title="Pagar Factura" subtitle="Consulta el saldo pendiente asociado a tu factura" theme={theme} onThemeToggle={onThemeToggle} />
 			<section className="payment-layout">
 				{!factura ? (
 					<div className="dashboard-card"><h3>No tienes facturas pendientes</h3><p>No hay un saldo pendiente disponible para pago.</p></div>
@@ -293,7 +303,7 @@ function PaymentView({ factura, onPay }) {
 	);
 }
 
-function SupportView({ perfil, tickets, onReport }) {
+function SupportView({ perfil, tickets, onReport, theme, onThemeToggle }) {
 	const [asunto, setAsunto] = useState("");
 	const [descripcion, setDescripcion] = useState("");
 	const [prioridad, setPrioridad] = useState("MEDIA");
@@ -321,7 +331,7 @@ function SupportView({ perfil, tickets, onReport }) {
 
 	return (
 		<>
-			<ClientHeader title="Soporte / Fallas" subtitle="Envía reportes y consulta tus tickets" />
+			<ClientHeader title="Soporte / Fallas" subtitle="Envía reportes y consulta tus tickets" theme={theme} onThemeToggle={onThemeToggle} />
 			<div className="support-grid">
 				<form className="dashboard-card support-form" onSubmit={handleSubmit}>
 					<h2>Reportar nueva falla</h2>
@@ -368,10 +378,10 @@ function SupportView({ perfil, tickets, onReport }) {
 	);
 }
 
-function CertificateView({ perfil, contrato, resumen }) {
+function CertificateView({ perfil, contrato, resumen, theme, onThemeToggle }) {
 	return (
 		<>
-			<ClientHeader title="Paz y Salvo" subtitle="Estado de tus obligaciones según facturas registradas" />
+			<ClientHeader title="Paz y Salvo" subtitle="Estado de tus obligaciones según facturas registradas" theme={theme} onThemeToggle={onThemeToggle} />
 			{!contrato ? <NoContractNotice /> : (
 				<section className="certificate dashboard-card">
 					<div className="certificate-title"><h2>ESTADO DE CUENTA</h2><p>Global Conexit</p></div>
@@ -409,6 +419,7 @@ function CertificateView({ perfil, contrato, resumen }) {
 function ClientPortal() {
 	const location = useLocation();
 	const navigate = useNavigate();
+	const [theme, toggleTheme] = useTheme();
 	const [currentView, setCurrentView] = useState("plan");
 	const [perfil, setPerfil] = useState(null);
 	const [portal, setPortal] = useState(null);
@@ -483,16 +494,16 @@ function ClientPortal() {
 	}
 
 	const contenido = {
-		plan: <PlanView contrato={portal.contrato} />,
-		cuenta: <ProfileView perfil={perfil} />,
-		facturas: <InvoicesView facturas={portal.facturas} resumen={portal.resumen} setFacturaSeleccionada={setFacturaSeleccionada} setCurrentView={setCurrentView} />,
-		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} />,
-		paz: <CertificateView perfil={perfil} contrato={portal.contrato} resumen={portal.resumen} />,
-		soporte: <SupportView perfil={perfil} tickets={portal.tickets} onReport={handleReport} />,
+		plan: <PlanView contrato={portal.contrato} theme={theme} onThemeToggle={toggleTheme} />,
+		cuenta: <ProfileView perfil={perfil} theme={theme} onThemeToggle={toggleTheme} />,
+		facturas: <InvoicesView facturas={portal.facturas} resumen={portal.resumen} setFacturaSeleccionada={setFacturaSeleccionada} setCurrentView={setCurrentView} theme={theme} onThemeToggle={toggleTheme} />,
+		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} theme={theme} onThemeToggle={toggleTheme} />,
+		paz: <CertificateView perfil={perfil} contrato={portal.contrato} resumen={portal.resumen} theme={theme} onThemeToggle={toggleTheme} />,
+		soporte: <SupportView perfil={perfil} tickets={portal.tickets} onReport={handleReport} theme={theme} onThemeToggle={toggleTheme} />,
 	};
 
 	return (
-		<div className="client-portal">
+		<div className="client-portal" data-theme={theme}>
 			<ToastMessage message={welcomeMessage} onClose={() => setWelcomeMessage("")} />
 			<ClientSidebar currentView={currentView} setCurrentView={setCurrentView} perfil={perfil} facturas={portal.facturas} />
 			<main className="client-main">{contenido[currentView]}</main>
