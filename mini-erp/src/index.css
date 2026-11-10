@@ -1,5 +1,34 @@
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--black);
+  --color-primary-foreground: var(--white);
+  --color-secondary: var(--panel-strong);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--panel-strong);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--beige);
+  --color-accent-foreground: var(--text);
+  --color-destructive: #dc2626;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--beige-strong);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
 
 :root {
+  --radius: 0.625rem;
   --bg: #f5efe6;
   --panel: #f9f4ee;
   --panel-strong: #f1e7d7;

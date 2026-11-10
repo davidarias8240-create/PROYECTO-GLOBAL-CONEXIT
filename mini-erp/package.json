@@ -11,11 +11,15 @@
   },
   "dependencies": {
     "@cloudflare/speedtest": "^1.14.0",
+    "@tailwindcss/vite": "^4.3.5",
     "bootstrap": "^5.3.8",
     "bootstrap-icons": "^1.13.2",
+    "clsx": "^2.1.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.5",
     "three": "^0.187.0"
   },
   "devDependencies": {
