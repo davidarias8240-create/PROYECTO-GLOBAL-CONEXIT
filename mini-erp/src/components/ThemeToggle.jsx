@@ -1,3 +1,5 @@
+import StarBorder from "./StarBorder";
+
 function SunIcon() {
 	return (
 		<svg viewBox="0 0 24 24" aria-hidden="true">
@@ -15,20 +17,22 @@ function MoonIcon() {
 	);
 }
 
-function ThemeToggle({ theme, onToggle }) {
+function ThemeToggle({ theme, onToggle, animatedBorder = false }) {
 	const nextTheme = theme === "light" ? "oscuro" : "claro";
+	const ThemeIcon = theme === "light" ? MoonIcon : SunIcon;
+	const buttonProps = {
+		className: "theme-toggle",
+		type: "button",
+		onClick: onToggle,
+		"aria-label": `Cambiar a modo ${nextTheme}`,
+		"aria-pressed": theme === "dark",
+		title: `Cambiar a modo ${nextTheme}`,
+	};
 
 	return (
-		<button
-			className="theme-toggle"
-			type="button"
-			onClick={onToggle}
-			aria-label={`Cambiar a modo ${nextTheme}`}
-			aria-pressed={theme === "dark"}
-			title={`Cambiar a modo ${nextTheme}`}
-		>
-			{theme === "light" ? <SunIcon /> : <MoonIcon />}
-		</button>
+		animatedBorder
+			? <StarBorder {...buttonProps} theme={theme} color="#ef7410" trailColor="#ffb84d" duration={5} thickness={1.2} radius={8} glow={0.4}><ThemeIcon /></StarBorder>
+			: <button {...buttonProps}><ThemeIcon /></button>
 	);
 }
 
