@@ -75,6 +75,7 @@ try {
         exit;
     }
 
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare(
         "INSERT INTO ticket (id_cliente, asunto, descripcion, prioridad)
          VALUES (:id_cliente, :asunto, :descripcion, :prioridad)"
@@ -85,11 +86,23 @@ try {
         ":descripcion" => $descripcion,
         ":prioridad" => $prioridad
     ]);
+    $idTicket = (int) $pdo->lastInsertId();
+
+    $notificacionStmt = $pdo->prepare(
+        "INSERT INTO notificacion (id_usuario, asunto, mensaje, canal)
+         VALUES (:id_usuario, :asunto, :mensaje, 'APP')"
+    );
+    $notificacionStmt->execute([
+        ":id_usuario" => $_SESSION["id_usuario"],
+        ":asunto" => "Ticket #{$idTicket} recibido",
+        ":mensaje" => "Tu ticket fue recibido correctamente.",
+    ]);
+    $pdo->commit();
 
     echo json_encode([
         "success" => true,
         "ticket" => [
-            "id_ticket" => (int) $pdo->lastInsertId(),
+            "id_ticket" => $idTicket,
             "asunto" => $asunto,
             "descripcion" => $descripcion,
             "prioridad" => $prioridad,
@@ -98,6 +111,9 @@ try {
         ]
     ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 } catch (PDOException $exception) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
     error_log("Error creando reporte de cliente: " . $exception->getMessage());
     http_response_code(500);
     echo json_encode(["error" => "No se pudo guardar el reporte"], JSON_UNESCAPED_UNICODE);
