@@ -320,17 +320,30 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 	const [enviando, setEnviando] = useState(false);
 	const [error, setError] = useState("");
 	const [mensaje, setMensaje] = useState("");
+	const [fieldErrors, setFieldErrors] = useState({});
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
 		setError("");
 		setMensaje("");
+		const normalizedAsunto = asunto.trim();
+		const normalizedDescripcion = descripcion.trim();
+		const errors = {};
+		if (!["Intermitencia de conexión", "Velocidad reducida", "Sin servicio", "Otro"].includes(normalizedAsunto)) {
+			errors.asunto = "Selecciona un tipo de falla válido.";
+		}
+		if (!normalizedDescripcion) errors.descripcion = "La descripción es obligatoria.";
+		else if (normalizedDescripcion.length > 5000) errors.descripcion = "La descripción no puede superar 5000 caracteres.";
+		if (!["BAJA", "MEDIA", "ALTA", "URGENTE"].includes(prioridad)) errors.prioridad = "Selecciona una prioridad válida.";
+		setFieldErrors(errors);
+		if (Object.keys(errors).length) return;
 		setEnviando(true);
 		try {
-			const result = await onReport({ asunto, descripcion, prioridad });
+			const result = await onReport({ asunto: normalizedAsunto, descripcion: normalizedDescripcion, prioridad });
 			setAsunto("");
 			setDescripcion("");
 			setPrioridad("MEDIA");
+			setFieldErrors({});
 			setMensaje(`Reporte ${result.ticket.id_ticket} guardado correctamente.`);
 		} catch (reportError) {
 			setError(reportError.message);
@@ -347,13 +360,22 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 					<h2>Reportar nueva falla</h2>
 					<p>El reporte quedará asociado a tu cuenta y se guardará en el sistema.</p>
 					<label>TIPO DE FALLA *
-						<select value={asunto} onChange={(event) => setAsunto(event.target.value)} required>
+						<select
+							value={asunto}
+							aria-invalid={Boolean(fieldErrors.asunto)}
+							onChange={(event) => {
+								setAsunto(event.target.value);
+								setFieldErrors((current) => ({ ...current, asunto: "" }));
+							}}
+							required
+						>
 							<option value="" disabled>Selecciona el tipo de falla...</option>
 							<option value="Intermitencia de conexión">Intermitencia de conexión</option>
 							<option value="Velocidad reducida">Velocidad reducida</option>
 							<option value="Sin servicio">Sin servicio</option>
 							<option value="Otro">Otro</option>
 						</select>
+						{fieldErrors.asunto && <small className="form-feedback error" role="alert">{fieldErrors.asunto}</small>}
 					</label>
 					<label>PRIORIDAD
 						<select value={prioridad} onChange={(event) => setPrioridad(event.target.value)}>
@@ -364,7 +386,22 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 						</select>
 					</label>
 					<label>DESCRIPCIÓN DEL PROBLEMA *
-						<textarea value={descripcion} onChange={(event) => setDescripcion(event.target.value)} maxLength={5000} required placeholder="Describe detalladamente el problema..." />
+						<textarea
+							value={descripcion}
+							onChange={(event) => {
+								setDescripcion(event.target.value);
+								const value = event.target.value.trim();
+								setFieldErrors((current) => ({
+									...current,
+									descripcion: value.length > 5000 ? "La descripción no puede superar 5000 caracteres." : "",
+								}));
+							}}
+							maxLength={5000}
+							aria-invalid={Boolean(fieldErrors.descripcion)}
+							required
+							placeholder="Describe detalladamente el problema..."
+						/>
+						{fieldErrors.descripcion && <small className="form-feedback error" role="alert">{fieldErrors.descripcion}</small>}
 					</label>
 					<label>TELÉFONO DE CONTACTO<input value={perfil.telefono || "No registrado"} readOnly /></label>
 					{error && <p className="form-feedback error" role="alert">{error}</p>}

@@ -31,7 +31,13 @@ $contrasena = is_array($data) && is_string($data["contrasena"] ?? null)
     ? $data["contrasena"]
     : "";
 
-if (!filter_var($correo, FILTER_VALIDATE_EMAIL) || $contrasena === "") {
+$dominioCorreo = substr(strrchr($correo, "@") ?: "", 1);
+if (!filter_var($correo, FILTER_VALIDATE_EMAIL)
+    || preg_match('/\s/u', $correo)
+    || $dominioCorreo === ""
+    || preg_match('/\.[A-Za-z]{2,}$/D', $dominioCorreo) !== 1
+    || mb_strlen($correo) > 150
+    || $contrasena === "") {
     http_response_code(400);
     echo json_encode(["error" => "Ingresa un correo válido y una contraseña"], JSON_UNESCAPED_UNICODE);
     exit;
