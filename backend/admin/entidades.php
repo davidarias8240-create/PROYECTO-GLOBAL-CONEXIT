@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . "/../config/admin_auth.php";
+require_once __DIR__ . "/../config/form_validation.php";
 
 $origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 $normalizedOrigin = rtrim($origin, "/");
@@ -176,12 +177,68 @@ function auditar(PDO $pdo, string $entidad, string $id, string $accion, ?array $
 
 function normalizarValor(array $column, mixed $value): mixed
 {
+    if (is_string($value)) {
+        $value = trim($value);
+    }
     if (is_string($value)
         && in_array($column["type"], ["datetime", "timestamp"], true)
         && str_contains($value, "T")) {
         return str_replace("T", " ", $value);
     }
     return $value;
+}
+
+function validarValorEntradaFormulario(
+    string $tabla,
+    string $campo,
+    mixed $valor,
+    array $column,
+    array $values,
+    bool $required
+): void {
+    if ($valor === null || (is_string($valor) && trim($valor) === "")) {
+        if ($required) {
+            responder(["error" => "El campo " . $campo . " es obligatorio", "campo" => $campo], 400);
+        }
+        return;
+    }
+
+    $error = errorCampoFormulario($tabla, $campo, $valor, $column, $values);
+    if ($error !== null) {
+        responder(["error" => $error, "campo" => $campo], 400);
+    }
+}
+
+function validarRestriccionesEntidad(string $entidad, array $values): void
+{
+    if ($entidad === "planes" && isset($values["vigencia_inicio"], $values["vigencia_fin"])
+        && $values["vigencia_fin"] !== null && $values["vigencia_fin"] < $values["vigencia_inicio"]) {
+        responder(["error" => "La fecha final del plan no puede ser anterior a su inicio", "campo" => "vigencia_fin"], 400);
+    }
+    if ($entidad === "contratos" && isset($values["fecha_inicio"], $values["fecha_fin"])
+        && $values["fecha_fin"] !== null && $values["fecha_fin"] < $values["fecha_inicio"]) {
+        responder(["error" => "La fecha final del contrato no puede ser anterior a su inicio", "campo" => "fecha_fin"], 400);
+    }
+    if ($entidad === "periodos") {
+        if (isset($values["fecha_inicio"], $values["fecha_fin"])
+            && $values["fecha_fin"] < $values["fecha_inicio"]) {
+            responder(["error" => "La fecha final del período no puede ser anterior a su inicio", "campo" => "fecha_fin"], 400);
+        }
+        if (isset($values["fecha_fin"], $values["fecha_vencimiento"])
+            && $values["fecha_vencimiento"] < $values["fecha_fin"]) {
+            responder(["error" => "El vencimiento del período no puede ser anterior a su fecha final", "campo" => "fecha_vencimiento"], 400);
+        }
+    }
+    if ($entidad === "facturas") {
+        if (isset($values["fecha_emision"], $values["fecha_vencimiento"])
+            && $values["fecha_vencimiento"] < $values["fecha_emision"]) {
+            responder(["error" => "El vencimiento de la factura no puede ser anterior a su emisión", "campo" => "fecha_vencimiento"], 400);
+        }
+        if (isset($values["total"], $values["saldo"])
+            && (float) $values["saldo"] > (float) $values["total"]) {
+            responder(["error" => "El saldo no puede superar el total de la factura", "campo" => "saldo"], 400);
+        }
+    }
 }
 
 function validarFechaCreacion(string $entidad, array $values): void
@@ -904,14 +961,26 @@ try {
                 || ($columns[$field]["generated"] && !$fechaPagoEditable)) {
                 responder(["error" => "Campo no permitido: " . $field], 400);
             }
-            if ($value === "" && $columns[$field]["nullable"]) {
+            if (($value === "" || (is_string($value) && trim($value) === ""))
+                && $columns[$field]["nullable"]) {
                 $values[$field] = null;
-            } elseif ($value === "" && $columns[$field]["default"] !== null) {
+            } elseif (($value === "" || (is_string($value) && trim($value) === ""))
+                && $columns[$field]["default"] !== null) {
                 unset($values[$field]);
-            } elseif ($value === "") {
-                responder(["error" => "El campo " . $field . " es obligatorio"], 400);
+            } elseif ($value === "" || (is_string($value) && trim($value) === "")) {
+                responder(["error" => "El campo " . $field . " es obligatorio", "campo" => $field], 400);
             } else {
                 $values[$field] = normalizarValor($columns[$field], $value);
+                validarValorEntradaFormulario(
+                    $tabla,
+                    $field,
+                    $values[$field],
+                    $columns[$field],
+                    array_merge($values, $input),
+                    !$columns[$field]["nullable"]
+                        && $columns[$field]["default"] === null
+                        && !$columns[$field]["generated"]
+                );
             }
         }
         foreach ($metadata["columns"] as $column) {
@@ -919,10 +988,11 @@ try {
                 continue;
             }
             if (!$column["nullable"] && $column["default"] === null && !array_key_exists($column["name"], $values)) {
-                responder(["error" => "El campo " . $column["name"] . " es obligatorio"], 400);
+                responder(["error" => "El campo " . $column["name"] . " es obligatorio", "campo" => $column["name"]], 400);
             }
         }
         validarFechaCreacion($entidad, $values);
+        validarRestriccionesEntidad($entidad, $values);
         validarRelacionesEntidad($pdo, $entidad, $values);
         if ($tabla === "pago") {
             $valorPago = $values["valor"] ?? null;
@@ -1052,8 +1122,34 @@ try {
                 foreach ($requiredClientFields as $requiredField) {
                     if (!is_string($client[$requiredField] ?? null) || trim($client[$requiredField]) === "") {
                         $pdo->rollBack();
-                        responder(["error" => "Completa los datos requeridos del perfil cliente: " . $requiredField], 400);
+                        responder([
+                            "error" => "Completa los datos requeridos del perfil cliente: " . $requiredField,
+                            "campo" => $requiredField,
+                        ], 400);
                     }
+                }
+                if (!in_array($client["tipo_documento"], ["CC", "CE", "NIT", "TI", "PASAPORTE", "OTRO"], true)) {
+                    $pdo->rollBack();
+                    responder(["error" => "El tipo de documento no es válido", "campo" => "tipo_documento"], 400);
+                }
+                $clientFields = [
+                    "numero_cliente" => ["type" => "varchar", "columnType" => "varchar(30)"],
+                    "numero_documento" => ["type" => "varchar", "columnType" => "varchar(30)"],
+                    "nombres" => ["type" => "varchar", "columnType" => "varchar(120)"],
+                    "telefono" => ["type" => "varchar", "columnType" => "varchar(30)"],
+                ];
+                foreach ($clientFields as $field => $column) {
+                    $value = trim((string) ($client[$field] ?? ""));
+                    if ($value === "" && $field === "telefono") {
+                        $client[$field] = null;
+                        continue;
+                    }
+                    $error = errorCampoFormulario("cliente", $field, $value, $column, $client);
+                    if ($error !== null) {
+                        $pdo->rollBack();
+                        responder(["error" => $error, "campo" => $field], 400);
+                    }
+                    $client[$field] = $value;
                 }
                 $clientInsert = $pdo->prepare(
                     "INSERT INTO cliente
@@ -1089,6 +1185,15 @@ try {
             responder(["error" => "No se puede editar este registro"], 400);
         }
         $input = $data["datos"];
+        $validationContext = $input;
+        if ($tabla === "cliente" && array_key_exists("numero_documento", $input)
+            && !array_key_exists("tipo_documento", $input)) {
+            $documentTypeStmt = $pdo->prepare(
+                "SELECT tipo_documento FROM cliente WHERE id_cliente = :id_cliente"
+            );
+            $documentTypeStmt->execute([":id_cliente" => $id]);
+            $validationContext["tipo_documento"] = $documentTypeStmt->fetchColumn() ?: "";
+        }
         $gestionTicket = $tabla === "ticket" && ($data["gestion_ticket"] ?? false) === true;
         $observacionTicket = "";
         if ($tabla === "ticket" && $gestionTicket) {
@@ -1154,12 +1259,21 @@ try {
                 || ($columns[$field]["generated"] && !$fechaPagoEditable)) {
                 responder(["error" => "Campo no permitido: " . $field], 400);
             }
-            if ($value === "" && $columns[$field]["nullable"]) {
+            if (($value === "" || (is_string($value) && trim($value) === ""))
+                && $columns[$field]["nullable"]) {
                 $values[$field] = null;
-            } elseif ($value === "") {
-                responder(["error" => "El campo " . $field . " no puede quedar vacío"], 400);
+            } elseif ($value === "" || (is_string($value) && trim($value) === "")) {
+                responder(["error" => "El campo " . $field . " no puede quedar vacío", "campo" => $field], 400);
             } else {
                 $values[$field] = normalizarValor($columns[$field], $value);
+                validarValorEntradaFormulario(
+                    $tabla,
+                    $field,
+                    $values[$field],
+                    $columns[$field],
+                    array_merge($validationContext, $values),
+                    !$columns[$field]["nullable"]
+                );
             }
         }
         if (!$values) {
@@ -1185,6 +1299,28 @@ try {
         if (!$exists->fetchColumn()) {
             responder(["error" => "No se encontró el registro activo"], 404);
         }
+        if ($tabla === "cliente"
+            && array_key_exists("tipo_documento", $values)
+            && !array_key_exists("numero_documento", $values)) {
+            $currentDocumentStmt = $pdo->prepare(
+                "SELECT numero_documento FROM cliente WHERE id_cliente = :id_cliente"
+            );
+            $currentDocumentStmt->execute([":id_cliente" => $id]);
+            $currentDocument = $currentDocumentStmt->fetchColumn();
+            $documentError = errorCampoFormulario(
+                "cliente",
+                "numero_documento",
+                $currentDocument,
+                $columns["numero_documento"],
+                array_merge($validationContext, $values, ["tipo_documento" => $values["tipo_documento"]])
+            );
+            if ($documentError !== null) {
+                responder([
+                    "error" => "El nuevo tipo de documento no coincide con el documento registrado: " . $documentError,
+                    "campo" => "tipo_documento",
+                ], 400);
+            }
+        }
         $assignments = implode(", ", array_map(static fn(string $name): string => "`{$name}` = :{$name}", array_keys($values)));
         $updateValues = [];
         foreach ($values as $field => $value) {
@@ -1194,7 +1330,7 @@ try {
         $stmt = $pdo->prepare("UPDATE `{$tabla}` SET {$assignments} WHERE `{$clave}` = :record_id");
         $pdo->beginTransaction();
         $paymentInvoiceIds = [];
-        if (in_array($tabla, ["contrato", "orden_servicio", "factura", "pago", "ticket"], true)) {
+        if (in_array($tabla, ["plan", "contrato", "periodo_facturacion", "factura", "orden_servicio", "pago", "ticket"], true)) {
             $currentStmt = $pdo->prepare(
                 "SELECT * FROM `{$tabla}` WHERE `{$clave}` = :record_id FOR UPDATE"
             );
@@ -1205,6 +1341,8 @@ try {
                 responder(["error" => "No se encontró el registro activo"], 404);
             }
             $effectiveValues = array_merge($currentRecord, $values);
+            validarFechaCreacion($entidad, $values);
+            validarRestriccionesEntidad($entidad, $effectiveValues);
             if (in_array($tabla, ["contrato", "orden_servicio"], true)) {
                 validarRelacionesEntidad($pdo, $entidad, $effectiveValues);
             }

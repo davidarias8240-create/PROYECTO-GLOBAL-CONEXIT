@@ -1,21 +1,29 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { iniciarSesionAdmin } from "../services/api";
+import { validateEmail } from "../utils/formValidation";
 
 function FormAdmin() {
     const navigate = useNavigate();
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [emailError, setEmailError] = useState("");
 
     const handleSubmit = async (event) => {
         event.preventDefault();
         const formData = new FormData(event.currentTarget);
+        const correo = String(formData.get("correo") || "").trim();
+        if (!validateEmail(correo)) {
+            setEmailError("Ingresa un correo válido, por ejemplo usuario@dominio.com.");
+            return;
+        }
+        setEmailError("");
         setError("");
         setIsSubmitting(true);
 
         try {
             await iniciarSesionAdmin({
-                correo: formData.get("correo"),
+                correo,
                 contrasena: formData.get("contrasena"),
             });
             navigate("/dashboard", { state: { welcome: true } });
@@ -41,7 +49,20 @@ function FormAdmin() {
                 <form onSubmit={handleSubmit}>
                     <div className="admin-login-field">
                         <label htmlFor="formEmail">Correo electrónico</label>
-                        <input type="email" id="formEmail" name="correo" placeholder="tu@correo.com" autoComplete="username" required />
+                        <input
+                            type="email"
+                            id="formEmail"
+                            name="correo"
+                            placeholder="tu@correo.com"
+                            autoComplete="username"
+                            maxLength={150}
+                            aria-invalid={Boolean(emailError)}
+                            onChange={(event) => setEmailError(event.target.value && !validateEmail(event.target.value)
+                                ? "Ingresa un correo válido, por ejemplo usuario@dominio.com."
+                                : "")}
+                            required
+                        />
+                        {emailError && <p className="text-danger" role="alert">{emailError}</p>}
                     </div>
                     <div className="admin-login-field">
                         <label htmlFor="formPassword">Contraseña</label>

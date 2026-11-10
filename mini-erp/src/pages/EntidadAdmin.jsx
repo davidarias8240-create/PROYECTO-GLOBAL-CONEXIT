@@ -8,6 +8,7 @@ import {
   obtenerRegistrosEntidad,
   obtenerSeguimientoTicket,
 } from "../services/api";
+import { sanitizeDocument, sanitizePhone, validateFieldSet, validateFieldValue } from "../utils/formValidation";
 
 const customerFields = [
   { name: "numero_cliente", label: "Número de cliente", required: true, maxLength: 30 },
@@ -21,6 +22,19 @@ const customerFields = [
   { name: "nombres", label: "Nombre del cliente", required: true, maxLength: 120 },
   { name: "telefono", label: "Teléfono", maxLength: 30 },
 ];
+
+function customerFieldColumn(field) {
+  const maxLength = field.name === "nombres" ? 120 : field.maxLength || 30;
+  return {
+    name: field.name,
+    type: "varchar",
+    columnType: `varchar(${maxLength})`,
+    nullable: !field.required,
+    default: field.required ? null : "",
+    generated: false,
+    enum: field.options || [],
+  };
+}
 
 // El formulario de usuarios reutiliza estos campos cuando se selecciona el rol CLIENTE.
 
@@ -291,12 +305,36 @@ function formatRelationDetails(column, option) {
   return "";
 }
 
-function EntityField({ entity, column, value, onChange, disabled = false, requiredOverride }) {
+function EntityField({
+  entity,
+  column,
+  value,
+  values,
+  error,
+  onChange,
+  onBlur,
+  disabled = false,
+  requiredOverride,
+}) {
   const [relationSearch, setRelationSearch] = useState("");
   const label = humanize(column.name);
   const required = requiredOverride ?? (!column.nullable && column.default === null && !column.generated);
   const isBoolean = column.type === "tinyint" && column.columnType.includes("(1)");
   const min = minimumDate(entity, column);
+  const maxLength = Number(column.columnType.match(/varchar\((\d+)\)/i)?.[1]) || 255;
+  const controlClass = (base) => `${base}${error ? " is-invalid" : ""}`;
+  const changeValue = (rawValue) => {
+    if (["telefono", "celular", "numero_celular", "telefono_contacto"].includes(column.name)) {
+      onChange(sanitizePhone(rawValue));
+      return;
+    }
+    if (["numero_documento", "documento"].includes(column.name)) {
+      onChange(sanitizeDocument(rawValue, values.tipo_documento, maxLength));
+      return;
+    }
+    onChange(rawValue);
+  };
+  const fieldError = error && <small className="text-danger d-block" role="alert">{error}</small>;
 
   if (isBoolean) {
     return (
@@ -339,12 +377,14 @@ function EntityField({ entity, column, value, onChange, disabled = false, requir
         )}
         {/* El buscador solo filtra las etiquetas; el select conserva el ID que requiere el backend. */}
         <select
-          className="form-select"
+          className={controlClass("form-select")}
           value={value ?? ""}
+          aria-invalid={Boolean(error)}
           onChange={(event) => {
             onChange(event.target.value);
             setRelationSearch("");
           }}
+          onBlur={onBlur}
           required={required}
           disabled={disabled}
         >
@@ -356,6 +396,7 @@ function EntityField({ entity, column, value, onChange, disabled = false, requir
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
+        {fieldError}
         {selectedOption && formatRelationDetails(column, selectedOption) && (
           <small className="text-muted">
             {formatRelationDetails(column, selectedOption)}
@@ -371,26 +412,37 @@ function EntityField({ entity, column, value, onChange, disabled = false, requir
       <span>{label}{required ? " *" : ""}</span>
       {isLongText ? (
         <textarea
-          className="form-control"
+          className={controlClass("form-control")}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={onBlur}
+          aria-invalid={Boolean(error)}
           required={required}
           disabled={disabled}
           rows={3}
         />
       ) : (
         <input
-          className="form-control"
+          className={controlClass("form-control")}
           type={inputType(column)}
+          inputMode={["telefono", "celular", "numero_celular", "telefono_contacto"].includes(column.name)
+            ? "numeric"
+            : ["numero_documento", "documento"].includes(column.name)
+              && ["CC", "TI", "NIT"].includes(values.tipo_documento)
+              ? "numeric"
+              : ["decimal", "float", "double"].includes(column.type) ? "decimal" : undefined}
           step={column.type === "decimal" || column.type === "float" || column.type === "double" ? "0.01" : undefined}
           min={entity === "pagos" && column.name === "valor" ? "0.01" : min}
           value={fieldValue(column, value)}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => changeValue(event.target.value)}
+          onBlur={onBlur}
+          aria-invalid={Boolean(error)}
           required={required}
           disabled={disabled}
-          maxLength={column.columnType.match(/\((\d+)\)/)?.[1]}
+          maxLength={["telefono", "celular", "numero_celular", "telefono_contacto"].includes(column.name) ? 10 : maxLength}
         />
       )}
+      {fieldError}
     </label>
   );
 }
@@ -400,6 +452,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [metadata, setMetadata] = useState(null);
   const [rows, setRows] = useState([]);
   const [values, setValues] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
   const [customer, setCustomer] = useState({});
   const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
@@ -416,6 +469,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const savingRef = useRef(false);
   const requestSequence = useRef(0);
   const lastClientSearch = useRef("");
   const relationRequestSequence = useRef(0);
@@ -543,6 +597,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const closeForm = () => {
     setShowForm(false);
     setEditingId(null);
+    setFieldErrors({});
     paymentIdempotencyKey.current = null;
     setValues({});
     setCustomer({});
@@ -635,6 +690,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       initialValues.id_usuario = customerUserId;
     }
     setValues(initialValues);
+    setFieldErrors({});
     setCustomer({});
     setPassword("");
     setEditingId(null);
@@ -678,6 +734,70 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
         const invoice = column.options?.find((option) => String(option.value) === String(value));
         next.valor = invoice?.details?.saldo || "";
       }
+      setFieldErrors((currentErrors) => {
+        const required = !column.nullable && column.default === null && !column.generated;
+        const error = validateFieldValue(column, next[column.name], { entity, values: next, required });
+        const updatedErrors = { ...currentErrors };
+        if (error) updatedErrors[column.name] = error;
+        else delete updatedErrors[column.name];
+        if (column.name === "tipo_documento" && next.numero_documento) {
+          const documentColumn = formColumns.find((item) => item.name === "numero_documento");
+          if (documentColumn) {
+            const documentError = validateFieldValue(documentColumn, next.numero_documento, {
+              entity,
+              values: next,
+              required: !documentColumn.nullable,
+            });
+            if (documentError) updatedErrors.numero_documento = documentError;
+            else delete updatedErrors.numero_documento;
+          }
+        }
+        return updatedErrors;
+      });
+      return next;
+    });
+  };
+
+  const handleFieldBlur = (column) => {
+    const required = !column.nullable && column.default === null && !column.generated;
+    const error = validateFieldValue(column, values[column.name], { entity, values, required });
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (error) next[column.name] = error;
+      else delete next[column.name];
+      return next;
+    });
+  };
+
+  const handleCustomerFieldChange = (field, rawValue) => {
+    let value = rawValue;
+    if (field.name === "telefono") value = sanitizePhone(value);
+    if (field.name === "numero_documento") {
+      value = sanitizeDocument(value, customer.tipo_documento, field.maxLength);
+    }
+    const nextCustomer = { ...customer, [field.name]: value };
+    setCustomer(nextCustomer);
+    const error = validateFieldValue(customerFieldColumn(field), value, {
+      entity: "clientes",
+      values: nextCustomer,
+      required: field.required,
+    });
+    const documentField = customerFields.find((item) => item.name === "numero_documento");
+    const documentError = field.name === "tipo_documento" && documentField && nextCustomer.numero_documento
+      ? validateFieldValue(customerFieldColumn(documentField), nextCustomer.numero_documento, {
+        entity: "clientes",
+        values: nextCustomer,
+        required: true,
+      })
+      : "";
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (error) next[`cliente.${field.name}`] = error;
+      else delete next[`cliente.${field.name}`];
+      if (field.name === "tipo_documento") {
+        if (documentError) next["cliente.numero_documento"] = documentError;
+        else delete next["cliente.numero_documento"];
+      }
       return next;
     });
   };
@@ -690,12 +810,31 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       column.name,
       fieldValue(column, row[column.name]),
     ])));
+    setFieldErrors({});
     setPassword("");
     setShowForm(true);
   };
 
   const handleSave = async (event) => {
     event.preventDefault();
+    if (savingRef.current) return;
+    const errors = validateFieldSet(formColumns, values, entity);
+    if (entity === "usuarios" && !editingId && isClientRole) {
+      if (!["CC", "CE", "NIT", "TI", "PASAPORTE", "OTRO"].includes(customer.tipo_documento)) {
+        errors["cliente.tipo_documento"] = "Selecciona un tipo de documento válido.";
+      }
+      for (const field of customerFields) {
+        const error = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
+          entity: "clientes",
+          values: customer,
+          required: field.required,
+        });
+        if (error) errors[`cliente.${field.name}`] = error;
+      }
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    savingRef.current = true;
     setSaving(true);
     setError("");
     setNotice("");
@@ -738,6 +877,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     } catch (saveError) {
       setError(saveError.message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -1190,7 +1330,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                     entity={entity}
                     column={fieldColumn}
                     value={values[column.name] ?? ""}
+                    values={values}
+                    error={fieldErrors[column.name]}
                     onChange={(value) => handleFieldChange(column, value)}
+                    onBlur={() => handleFieldBlur(column)}
                     disabled={Boolean(
                       customerId
                       && (column.name === "id_cliente"
@@ -1230,20 +1373,53 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                       <select
                         className="form-select"
                         value={customer[field.name] || ""}
-                        onChange={(event) => setCustomer((current) => ({ ...current, [field.name]: event.target.value }))}
+                        onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
+                        onBlur={() => {
+                          const error = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
+                            entity: "clientes",
+                            values: customer,
+                            required: field.required,
+                          });
+                          setFieldErrors((current) => {
+                            const next = { ...current };
+                            if (error) next[`cliente.${field.name}`] = error;
+                            else delete next[`cliente.${field.name}`];
+                            return next;
+                          });
+                        }}
                         required={field.required}
+                        aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
                       >
                         <option value="">Selecciona...</option>
                         {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
                       </select>
                     ) : (
                       <input
-                        className="form-control"
+                        className={`form-control${fieldErrors[`cliente.${field.name}`] ? " is-invalid" : ""}`}
+                        type={field.name === "telefono" ? "tel" : "text"}
+                        inputMode={["telefono", "numero_documento"].includes(field.name) ? "numeric" : undefined}
                         value={customer[field.name] || ""}
-                        maxLength={field.maxLength}
+                        maxLength={field.name === "telefono" ? 10 : field.maxLength}
                         required={field.required}
-                        onChange={(event) => setCustomer((current) => ({ ...current, [field.name]: event.target.value }))}
+                        aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
+                        onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
+                        onBlur={() => {
+                          const error = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
+                            entity: "clientes",
+                            values: customer,
+                            required: field.required,
+                          });
+                          setFieldErrors((current) => {
+                            const next = { ...current };
+                            if (error) next[`cliente.${field.name}`] = error;
+                            else delete next[`cliente.${field.name}`];
+                            return next;
+                          });
+                        }}
                       />
+                    )}
+                    {fieldErrors[`cliente.${field.name}`] && (
+                      <small className="text-danger d-block" role="alert">{fieldErrors[`cliente.${field.name}`]}</small>
                     )}
                   </label>
                 ))}

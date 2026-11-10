@@ -20,9 +20,20 @@ $contrasena = is_array($data) && is_string($data["contrasena"] ?? null)
     : "";
 
 if (!in_array($tipoDocumento, ["CC", "CE", "NIT", "TI", "PASAPORTE", "OTRO"], true)
-    || $numeroDocumento === "" || $contrasena === "") {
+    || $numeroDocumento === "" || mb_strlen($numeroDocumento) > 30 || $contrasena === "") {
     http_response_code(400);
     echo json_encode(["error" => "Ingresa tu tipo y número de documento y contraseña"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+$patronDocumento = match ($tipoDocumento) {
+    "CC", "TI" => '/^[0-9]+$/D',
+    "NIT" => '/^[0-9]+(?:-[0-9])?$/D',
+    "CE", "PASAPORTE" => '/^[A-Za-z0-9-]+$/D',
+    default => '/^[A-Za-z0-9.-]+$/D',
+};
+if (preg_match($patronDocumento, $numeroDocumento) !== 1) {
+    http_response_code(400);
+    echo json_encode(["error" => "El documento contiene caracteres no permitidos para el tipo seleccionado"], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
