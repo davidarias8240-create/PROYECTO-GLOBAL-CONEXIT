@@ -83,6 +83,10 @@ export function obtenerRegistrosEntidad(entity, archivados = false, customerId =
   });
 }
 
+export function obtenerSeguimientoTicket(idTicket) {
+  return request(`tickets/seguimiento.php?id_ticket=${encodeURIComponent(idTicket)}`);
+}
+
 export function obtenerDetalleCliente(idCliente) {
   return request(`clientes/detalle.php?id_cliente=${encodeURIComponent(idCliente)}`);
 }

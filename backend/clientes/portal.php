@@ -135,6 +135,65 @@ try {
     $ticketsStmt->execute([":id_cliente" => $idCliente]);
     $tickets = $ticketsStmt->fetchAll();
 
+    $historialTicketsStmt = $pdo->prepare(
+        "SELECT i.id_interaccion, i.id_ticket, i.id_usuario, i.fecha, i.razon,
+                i.descripcion, i.accion_pendiente, u.correo AS responsable
+         FROM interaccion i
+         INNER JOIN ticket t ON t.id_ticket = i.id_ticket
+         LEFT JOIN usuario u ON u.id_usuario = i.id_usuario
+         WHERE t.id_cliente = :id_cliente
+           AND i.razon IN ('CAMBIO_ESTADO_TICKET', 'SEGUIMIENTO_TICKET')
+           AND NOT EXISTS (
+                SELECT 1 FROM admin_bajas b
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(t.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY i.fecha DESC, i.id_interaccion DESC"
+    );
+    $historialTicketsStmt->execute([":id_cliente" => $idCliente]);
+    $historialPorTicket = [];
+    foreach ($historialTicketsStmt->fetchAll() as $item) {
+        if (is_string($item["accion_pendiente"])
+            && preg_match('/^ESTADO\\|([^|]+)\\|([^|]+)$/D', $item["accion_pendiente"], $match)) {
+            $item["estado_anterior"] = $match[1];
+            $item["estado_nuevo"] = $match[2];
+        } else {
+            $item["estado_anterior"] = null;
+            $item["estado_nuevo"] = null;
+        }
+        unset($item["accion_pendiente"]);
+        $historialPorTicket[(string) $item["id_ticket"]][] = $item;
+    }
+    foreach ($tickets as &$ticket) {
+        $ticket["historial"] = $historialPorTicket[(string) $ticket["id_ticket"]] ?? [];
+        $ticket["fecha_actualizacion"] = $ticket["historial"][0]["fecha"] ?? $ticket["fecha_creacion"];
+        $ticket["respuesta_admin"] = "";
+        foreach ($ticket["historial"] as $item) {
+            if (trim((string) $item["descripcion"]) !== "") {
+                $ticket["respuesta_admin"] = $item["descripcion"];
+                break;
+            }
+        }
+    }
+    unset($ticket);
+
+    $notificacionesStmt = $pdo->prepare(
+        "SELECT n.id_notificacion, n.asunto, n.mensaje, n.canal, n.fecha, n.estado_entrega
+         FROM notificacion n
+         WHERE n.id_usuario = :id_usuario
+           AND NOT EXISTS (
+                SELECT 1 FROM admin_bajas b
+                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'notificaciones' COLLATE utf8mb4_unicode_ci
+                  AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                      CAST(n.id_notificacion AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY n.fecha DESC, n.id_notificacion DESC
+         LIMIT 20"
+    );
+    $notificacionesStmt->execute([":id_usuario" => $_SESSION["id_usuario"]]);
+    $notificaciones = $notificacionesStmt->fetchAll();
+
     $pendiente = 0.0;
     $pagado = 0.0;
     foreach ($facturas as $factura) {
@@ -148,6 +207,7 @@ try {
         "contrato" => $contrato,
         "facturas" => $facturas,
         "tickets" => $tickets,
+        "notificaciones" => $notificaciones,
         "resumen" => [
             "pendiente" => round($pendiente, 2),
             "pagado" => round($pagado, 2),

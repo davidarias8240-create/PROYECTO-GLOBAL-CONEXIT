@@ -718,6 +718,28 @@ function obtenerOpcionesRelacion(
     return $options;
 }
 
+function transicionTicketPermitida(string $anterior, string $nuevo): bool
+{
+    $transiciones = [
+        "ABIERTO" => ["EN_PROCESO", "PENDIENTE", "CERRADO"],
+        "EN_PROCESO" => ["PENDIENTE", "CERRADO"],
+        "PENDIENTE" => ["EN_PROCESO", "CERRADO"],
+        "CERRADO" => ["ABIERTO"],
+    ];
+    return in_array($nuevo, $transiciones[$anterior] ?? [], true);
+}
+
+function mensajeNotificacionTicket(string $estado): string
+{
+    return match ($estado) {
+        "ABIERTO" => "Tu ticket fue recibido correctamente.",
+        "EN_PROCESO" => "Estamos trabajando en tu solicitud.",
+        "PENDIENTE" => "Necesitamos información adicional para continuar.",
+        "CERRADO" => "La gestión de tu ticket fue cerrada.",
+        default => throw new InvalidArgumentException("Estado de ticket no válido"),
+    };
+}
+
 try {
     $metadata = obtenerMetadatos($pdo, $baseDatos, $tabla, $clave);
     $method = $_SERVER["REQUEST_METHOD"];
@@ -867,6 +889,9 @@ try {
         $columns = array_column($metadata["columns"], null, "name");
         $values = [];
         foreach ($input as $field => $value) {
+            if ($tabla === "ticket" && in_array($field, ["estado", "fecha_cierre"], true)) {
+                responder(["error" => "El estado y la fecha de cierre del ticket se gestionan desde su seguimiento"], 400);
+            }
             if ($field === "contrasena_hash") {
                 if ($tabla === "usuario") {
                     $values[$field] = $value;
@@ -1064,6 +1089,24 @@ try {
             responder(["error" => "No se puede editar este registro"], 400);
         }
         $input = $data["datos"];
+        $gestionTicket = $tabla === "ticket" && ($data["gestion_ticket"] ?? false) === true;
+        $observacionTicket = "";
+        if ($tabla === "ticket" && $gestionTicket) {
+            $observacion = $data["observacion_gestion"] ?? "";
+            if (!is_string($observacion) || mb_strlen($observacion) > 5000) {
+                responder(["error" => "La observación debe tener hasta 5000 caracteres"], 400);
+            }
+            $observacionTicket = trim($observacion);
+            if (array_diff(array_keys($input), ["estado"])) {
+                responder(["error" => "La gestión del ticket solo puede actualizar su estado"], 400);
+            }
+            if (!array_key_exists("estado", $input)) {
+                responder(["error" => "Selecciona un estado para el ticket"], 400);
+            }
+            if (!is_string($input["estado"])) {
+                responder(["error" => "El estado seleccionado no es válido"], 400);
+            }
+        }
         if ($tabla === "rol" && ($input["estado"] ?? null) === "INACTIVO") {
             $activeAdmins = $pdo->prepare(
                 "SELECT COUNT(*)
@@ -1099,6 +1142,12 @@ try {
             if ($field === "contrasena_hash" && $tabla === "usuario") {
                 $values[$field] = $value;
                 continue;
+            }
+            if ($tabla === "ticket" && $field === "estado" && !$gestionTicket) {
+                responder(["error" => "El estado del ticket solo se puede cambiar desde su seguimiento"], 403);
+            }
+            if ($tabla === "ticket" && $field === "fecha_cierre") {
+                responder(["error" => "La fecha de cierre del ticket se actualiza automáticamente"], 400);
             }
             $fechaPagoEditable = $tabla === "pago" && $field === "fecha";
             if ($field === $clave || !isset($columns[$field])
@@ -1145,7 +1194,7 @@ try {
         $stmt = $pdo->prepare("UPDATE `{$tabla}` SET {$assignments} WHERE `{$clave}` = :record_id");
         $pdo->beginTransaction();
         $paymentInvoiceIds = [];
-        if (in_array($tabla, ["contrato", "orden_servicio", "factura", "pago"], true)) {
+        if (in_array($tabla, ["contrato", "orden_servicio", "factura", "pago", "ticket"], true)) {
             $currentStmt = $pdo->prepare(
                 "SELECT * FROM `{$tabla}` WHERE `{$clave}` = :record_id FOR UPDATE"
             );
@@ -1226,6 +1275,25 @@ try {
                     }
                 }
             }
+            if ($tabla === "ticket") {
+                $estadoAnteriorTicket = (string) $currentRecord["estado"];
+                $estadoNuevoTicket = (string) ($effectiveValues["estado"] ?? $estadoAnteriorTicket);
+                $estadosTicket = ["ABIERTO", "EN_PROCESO", "PENDIENTE", "CERRADO"];
+                if (!in_array($estadoNuevoTicket, $estadosTicket, true)) {
+                    $pdo->rollBack();
+                    responder(["error" => "El estado seleccionado no es válido"], 400);
+                }
+                if ($gestionTicket && $estadoAnteriorTicket !== $estadoNuevoTicket
+                    && !transicionTicketPermitida($estadoAnteriorTicket, $estadoNuevoTicket)) {
+                    $pdo->rollBack();
+                    responder(["error" => "La transición de estado seleccionada no está permitida"], 409);
+                }
+                if ($gestionTicket && $estadoAnteriorTicket === $estadoNuevoTicket
+                    && $observacionTicket === "") {
+                    $pdo->rollBack();
+                    responder(["error" => "Cambia el estado o agrega una observación de gestión"], 400);
+                }
+            }
         }
         if ($tabla === "cliente" && array_key_exists("correo", $values)) {
             // El correo también es el usuario de inicio de sesión del cliente vinculado.
@@ -1247,6 +1315,59 @@ try {
             }
         }
         $stmt->execute($updateValues);
+        if ($tabla === "ticket" && $gestionTicket) {
+            $cambioEstadoTicket = $estadoAnteriorTicket !== $estadoNuevoTicket;
+            if ($cambioEstadoTicket) {
+                $fechaCierreSql = $estadoNuevoTicket === "CERRADO" ? "CURRENT_TIMESTAMP" : "NULL";
+                $cierreStmt = $pdo->prepare(
+                    "UPDATE ticket SET fecha_cierre = {$fechaCierreSql} WHERE id_ticket = :id_ticket"
+                );
+                $cierreStmt->execute([":id_ticket" => $id]);
+            }
+
+            $interaccionStmt = $pdo->prepare(
+                "INSERT INTO interaccion (
+                    id_ticket, id_usuario, canal, razon, descripcion, accion_pendiente
+                 ) VALUES (
+                    :id_ticket, :id_usuario, 'OTRO', :razon, :descripcion, :accion_pendiente
+                 )"
+            );
+            $interaccionStmt->execute([
+                ":id_ticket" => $id,
+                ":id_usuario" => $_SESSION["id_usuario"],
+                ":razon" => $cambioEstadoTicket ? "CAMBIO_ESTADO_TICKET" : "SEGUIMIENTO_TICKET",
+                ":descripcion" => $observacionTicket,
+                ":accion_pendiente" => $cambioEstadoTicket
+                    ? "ESTADO|{$estadoAnteriorTicket}|{$estadoNuevoTicket}"
+                    : null,
+            ]);
+
+            if ($cambioEstadoTicket) {
+                $clienteUsuarioStmt = $pdo->prepare(
+                    "SELECT c.id_usuario
+                     FROM ticket t
+                     INNER JOIN cliente c ON c.id_cliente = t.id_cliente
+                     WHERE t.id_ticket = :id_ticket
+                     LIMIT 1"
+                );
+                $clienteUsuarioStmt->execute([":id_ticket" => $id]);
+                $idUsuarioCliente = $clienteUsuarioStmt->fetchColumn();
+                if ($idUsuarioCliente === false || $idUsuarioCliente === null) {
+                    $pdo->rollBack();
+                    responder(["error" => "El cliente del ticket no tiene una cuenta asociada para recibir notificaciones"], 409);
+                }
+
+                $notificacionStmt = $pdo->prepare(
+                    "INSERT INTO notificacion (id_usuario, asunto, mensaje, canal)
+                     VALUES (:id_usuario, :asunto, :mensaje, 'APP')"
+                );
+                $notificacionStmt->execute([
+                    ":id_usuario" => $idUsuarioCliente,
+                    ":asunto" => "Actualización del ticket #{$id}",
+                    ":mensaje" => mensajeNotificacionTicket($estadoNuevoTicket),
+                ]);
+            }
+        }
         if ($idClienteContexto !== null
             && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $id, $idClienteContexto)) {
             $pdo->rollBack();
@@ -1258,7 +1379,13 @@ try {
             }
         }
         unset($input["contrasena_hash"]);
-        auditar($pdo, $tabla, $id, "EDITAR", $input);
+        $detalleAuditoria = $input;
+        if ($tabla === "ticket" && $gestionTicket) {
+            $detalleAuditoria["estado_anterior"] = $estadoAnteriorTicket;
+            $detalleAuditoria["estado_nuevo"] = $estadoNuevoTicket;
+            $detalleAuditoria["observacion_gestion"] = $observacionTicket;
+        }
+        auditar($pdo, $tabla, $id, "EDITAR", $detalleAuditoria);
         $pdo->commit();
         responder(["success" => true]);
     }

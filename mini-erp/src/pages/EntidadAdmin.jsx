@@ -6,6 +6,7 @@ import {
   obtenerDetalleCliente,
   obtenerMetadatosEntidad,
   obtenerRegistrosEntidad,
+  obtenerSeguimientoTicket,
 } from "../services/api";
 
 const customerFields = [
@@ -28,6 +29,16 @@ function humanize(name) {
     .replace(/^id_/, "ID ")
     .replaceAll("_", " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function ticketStatusLabel(status) {
+  const labels = {
+    ABIERTO: "Abierto",
+    EN_PROCESO: "En proceso",
+    PENDIENTE: "Pendiente del cliente",
+    CERRADO: "Cerrado",
+  };
+  return labels[status] || status;
 }
 
 function escapeHtml(value) {
@@ -395,6 +406,11 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [ticketStatus, setTicketStatus] = useState("");
+  const [ticketComment, setTicketComment] = useState("");
+  const [loadingTicketDetail, setLoadingTicketDetail] = useState(false);
+  const [savingTicket, setSavingTicket] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingCustomerDetail, setLoadingCustomerDetail] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -431,6 +447,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setRows([]);
     setShowForm(false);
     setSelectedCustomer(null);
+    setSelectedTicket(null);
+    setTicketComment("");
     setLoadingCustomerDetail(false);
     setSearch("");
     loadData();
@@ -495,6 +513,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const formColumns = useMemo(
     () => visibleColumns.filter((column) =>
       column.name !== metadata.clave
+      && !(entity === "tickets" && ["estado", "fecha_cierre"].includes(column.name))
       && (!column.generated || (entity === "pagos" && column.name === "fecha"))
       && column.name !== "contrasena_hash"
     ),
@@ -528,6 +547,53 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setValues({});
     setCustomer({});
     setPassword("");
+  };
+
+  const openTicketDetail = async (row) => {
+    setLoadingTicketDetail(true);
+    setError("");
+    setNotice("");
+    try {
+      const detail = await obtenerSeguimientoTicket(row.id_ticket);
+      setSelectedTicket(detail);
+      setTicketStatus(detail.ticket.estado);
+      setTicketComment("");
+    } catch (detailError) {
+      setError(detailError.message);
+    } finally {
+      setLoadingTicketDetail(false);
+    }
+  };
+
+  const closeTicketDetail = () => {
+    setSelectedTicket(null);
+    setTicketComment("");
+  };
+
+  const handleTicketManagement = async (event) => {
+    event.preventDefault();
+    if (!selectedTicket) return;
+
+    setSavingTicket(true);
+    setError("");
+    setNotice("");
+    try {
+      await guardarRegistroEntidad("tickets", {
+        datos: { estado: ticketStatus },
+        gestion_ticket: true,
+        observacion_gestion: ticketComment,
+      }, selectedTicket.ticket.id_ticket, customerId);
+      const detail = await obtenerSeguimientoTicket(selectedTicket.ticket.id_ticket);
+      setSelectedTicket(detail);
+      setTicketStatus(detail.ticket.estado);
+      setTicketComment("");
+      setNotice("Seguimiento del ticket actualizado.");
+      await loadData();
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSavingTicket(false);
+    }
   };
 
   const closeCustomerDetail = () => {
@@ -998,6 +1064,96 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
       {entity === "clientes" && selectedCustomer && renderCustomerDetail()}
       {entity === "clientes" && loadingCustomerDetail && <p className="alert alert-info">Cargando detalle del cliente...</p>}
+      {entity === "tickets" && loadingTicketDetail && <p className="alert alert-info">Cargando detalle del ticket...</p>}
+      {entity === "tickets" && selectedTicket && (
+        <section className="dashboard-card admin-entity-form mb-4">
+          <div className="d-flex justify-content-between align-items-start gap-2 mb-3">
+            <div>
+              <h3 className="h5 mb-1">Ticket #{selectedTicket.ticket.id_ticket}</h3>
+              <p className="text-muted mb-0">
+                {selectedTicket.ticket.cliente_nombre} · {selectedTicket.ticket.numero_cliente}
+              </p>
+            </div>
+            <button type="button" className="btn-close" aria-label="Cerrar detalle del ticket" onClick={closeTicketDetail} />
+          </div>
+          <dl className="row mb-4">
+            <dt className="col-sm-3">Asunto</dt>
+            <dd className="col-sm-9">{selectedTicket.ticket.asunto}</dd>
+            <dt className="col-sm-3">Descripción</dt>
+            <dd className="col-sm-9">{selectedTicket.ticket.descripcion}</dd>
+            <dt className="col-sm-3">Creado</dt>
+            <dd className="col-sm-9">{formatDate(selectedTicket.ticket.fecha_creacion)}</dd>
+            <dt className="col-sm-3">Última actualización</dt>
+            <dd className="col-sm-9">{formatDate(selectedTicket.ticket.fecha_actualizacion)}</dd>
+          </dl>
+          <form onSubmit={handleTicketManagement}>
+            <div className="admin-entity-fields">
+              <label className="admin-entity-field">
+                <span>Estado del ticket</span>
+                <select
+                  className="form-select"
+                  value={ticketStatus}
+                  onChange={(event) => setTicketStatus(event.target.value)}
+                  required
+                >
+                  {metadata.columnas
+                    .find((column) => column.name === "estado")
+                    ?.enum.filter((status) => status === selectedTicket.ticket.estado
+                      || ({
+                        ABIERTO: ["EN_PROCESO", "PENDIENTE", "CERRADO"],
+                        EN_PROCESO: ["PENDIENTE", "CERRADO"],
+                        PENDIENTE: ["EN_PROCESO", "CERRADO"],
+                        CERRADO: ["ABIERTO"],
+                      })[selectedTicket.ticket.estado]?.includes(status))
+                    .map((status) => (
+                      <option key={status} value={status}>{ticketStatusLabel(status)}</option>
+                    ))}
+                </select>
+              </label>
+              <label className="admin-entity-field">
+                <span>Observación o respuesta para el cliente</span>
+                <textarea
+                  className="form-control"
+                  value={ticketComment}
+                  onChange={(event) => setTicketComment(event.target.value)}
+                  maxLength={5000}
+                  rows={3}
+                />
+              </label>
+            </div>
+            <div className="d-flex gap-2 mt-3">
+              <button
+                className="btn btn-success"
+                type="submit"
+                disabled={savingTicket || (ticketStatus === selectedTicket.ticket.estado && !ticketComment.trim())}
+              >
+                {savingTicket ? "Guardando..." : "Guardar seguimiento"}
+              </button>
+              <button className="btn btn-outline-secondary" type="button" onClick={closeTicketDetail}>Cerrar</button>
+            </div>
+          </form>
+          <div className="mt-4">
+            <h4 className="h6">Historial de seguimiento</h4>
+            {selectedTicket.historial.length === 0 ? (
+              <p className="text-muted mb-0">No hay cambios de estado ni observaciones registradas.</p>
+            ) : (
+              <ol className="mb-0">
+                {selectedTicket.historial.map((item) => (
+                  <li className="mb-3" key={item.id_interaccion}>
+                    <strong>
+                      {item.estado_anterior && item.estado_nuevo
+                        ? `${ticketStatusLabel(item.estado_anterior)} → ${ticketStatusLabel(item.estado_nuevo)}`
+                        : "Observación de gestión"}
+                    </strong>
+                    <div className="text-muted">{formatDate(item.fecha)} · {item.responsable || "Usuario administrador"}</div>
+                    {item.descripcion && <p className="mb-0">{item.descripcion}</p>}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </section>
+      )}
 
       {showForm && (
         <form className="dashboard-card admin-entity-form mb-4" onSubmit={handleSave}>
@@ -1162,6 +1318,20 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                       )}
                       {canManageRecords && (
                         <>
+                          {entity === "tickets" && (
+                            <button
+                              type="button"
+                              className="btn btn-info btn-sm text-white"
+                              title="Gestionar ticket"
+                              aria-label={`Gestionar ticket ${row.id_ticket}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openTicketDetail(row);
+                              }}
+                            >
+                              <i className="bi bi-chat-square-text" aria-hidden="true" />
+                            </button>
+                          )}
                           {entity === "clientes" && (
                             <>
                               <button

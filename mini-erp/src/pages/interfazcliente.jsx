@@ -54,6 +54,16 @@ function estadoFactura(factura) {
 	return estados[factura.estado] || { label: factura.estado, className: "pending" };
 }
 
+function estadoTicket(ticket) {
+	const estados = {
+		ABIERTO: "Abierto",
+		EN_PROCESO: "En proceso",
+		PENDIENTE: "Pendiente del cliente",
+		CERRADO: "Cerrado",
+	};
+	return estados[ticket.estado] || ticket.estado;
+}
+
 function StatusPill({ children = "Cuenta de cliente" }) {
 	return <span className="client-status"><i />{children}</span>;
 }
@@ -303,7 +313,7 @@ function PaymentView({ factura, onPay, theme, onThemeToggle }) {
 	);
 }
 
-function SupportView({ perfil, tickets, onReport, theme, onThemeToggle }) {
+function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, theme, onThemeToggle }) {
 	const [asunto, setAsunto] = useState("");
 	const [descripcion, setDescripcion] = useState("");
 	const [prioridad, setPrioridad] = useState("MEDIA");
@@ -368,10 +378,42 @@ function SupportView({ perfil, tickets, onReport, theme, onThemeToggle }) {
 							<small>Ticket #{ticket.id_ticket} · {ticket.prioridad}</small>
 							<strong>{ticket.asunto}</strong>
 							<p>{ticket.descripcion}</p>
-							<span>{ticket.estado.replace("_", " ")}</span>
-							<time>{formatDate(ticket.fecha_creacion)}</time>
+							<span>{estadoTicket(ticket)}</span>
+							<p><small>Creado: {formatDate(ticket.fecha_creacion)} · Última actualización: {formatDate(ticket.fecha_actualizacion || ticket.fecha_creacion)}</small></p>
+							{ticket.respuesta_admin && <p><strong>Última respuesta:</strong> {ticket.respuesta_admin}</p>}
+							{ticket.historial?.length > 0 && (
+								<div>
+									<strong>Historial de seguimiento</strong>
+									<ol>
+										{ticket.historial.map((item) => (
+											<li key={item.id_interaccion}>
+												{item.estado_anterior && item.estado_nuevo
+													? `${estadoTicket({ estado: item.estado_anterior })} → ${estadoTicket({ estado: item.estado_nuevo })}`
+													: "Observación de gestión"}
+												{" · "}{formatDate(item.fecha)}
+												{item.descripcion && <p>{item.descripcion}</p>}
+											</li>
+										))}
+									</ol>
+								</div>
+							)}
 						</article>
 					))}
+				</section>
+				<section className="dashboard-card tickets">
+					<h2>Notificaciones</h2>
+					{refreshError && <p className="form-feedback error" role="alert">{refreshError}</p>}
+					{notificaciones.length === 0 ? <p>No tienes notificaciones recientes.</p> : (
+						<ul>
+							{notificaciones.map((notificacion) => (
+								<li key={notificacion.id_notificacion}>
+									<strong>{notificacion.asunto}</strong>
+									<p>{notificacion.mensaje}</p>
+									<time>{formatDate(notificacion.fecha)}</time>
+								</li>
+							))}
+						</ul>
+					)}
 				</section>
 			</div>
 		</>
@@ -426,6 +468,7 @@ function ClientPortal() {
 	const [facturaSeleccionada, setFacturaSeleccionada] = useState(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState("");
+	const [portalRefreshError, setPortalRefreshError] = useState("");
 	const [welcomeMessage, setWelcomeMessage] = useState(
 		() => location.state?.welcome ? "¡Bienvenido de nuevo a Global Conexit!" : ""
 	);
@@ -447,6 +490,30 @@ function ClientPortal() {
 	}, []);
 
 	useEffect(() => {
+		if (loading) return undefined;
+		let active = true;
+		let timeoutId;
+		const refreshPortal = async () => {
+			try {
+				const latestPortal = await obtenerPortalCliente();
+				if (active) {
+					setPortal(latestPortal);
+					setPortalRefreshError("");
+				}
+			} catch (refreshError) {
+				if (active) setPortalRefreshError(refreshError.message);
+			} finally {
+				if (active) timeoutId = window.setTimeout(refreshPortal, 15000);
+			}
+		};
+		timeoutId = window.setTimeout(refreshPortal, 15000);
+		return () => {
+			active = false;
+			window.clearTimeout(timeoutId);
+		};
+	}, [loading]);
+
+	useEffect(() => {
 		if (location.state?.welcome) {
 			navigate(location.pathname, { replace: true, state: null });
 		}
@@ -454,7 +521,13 @@ function ClientPortal() {
 
 	const handleReport = async (report) => {
 		const result = await reportarFallaCliente(report);
-		setPortal((current) => ({ ...current, tickets: [result.ticket, ...current.tickets] }));
+		try {
+			const latestPortal = await obtenerPortalCliente();
+			setPortal(latestPortal);
+			setPortalRefreshError("");
+		} catch (refreshError) {
+			setPortalRefreshError(refreshError.message);
+		}
 		return result;
 	};
 
@@ -499,7 +572,7 @@ function ClientPortal() {
 		facturas: <InvoicesView facturas={portal.facturas} resumen={portal.resumen} setFacturaSeleccionada={setFacturaSeleccionada} setCurrentView={setCurrentView} theme={theme} onThemeToggle={toggleTheme} />,
 		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} theme={theme} onThemeToggle={toggleTheme} />,
 		paz: <CertificateView perfil={perfil} contrato={portal.contrato} resumen={portal.resumen} theme={theme} onThemeToggle={toggleTheme} />,
-		soporte: <SupportView perfil={perfil} tickets={portal.tickets} onReport={handleReport} theme={theme} onThemeToggle={toggleTheme} />,
+		soporte: <SupportView perfil={perfil} tickets={portal.tickets} notificaciones={portal.notificaciones || []} refreshError={portalRefreshError} onReport={handleReport} theme={theme} onThemeToggle={toggleTheme} />,
 	};
 
 	return (
