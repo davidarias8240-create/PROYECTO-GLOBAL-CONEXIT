@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost/PROYECTO-GLOBAL-CONEXIT/backend";
+const BASE_URL = "https://globalconexit.tech/backend";
 
 async function readResponse(response) {
   const data = await response.json();
