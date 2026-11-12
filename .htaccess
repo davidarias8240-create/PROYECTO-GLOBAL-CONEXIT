@@ -1,0 +1,11 @@
+RewriteEngine On
+
+RewriteRule ^mini-erp/?$ / [R=301,L]
+RewriteRule ^backend(?:/|$) - [L]
+RewriteRule ^assets/(.*)$ dist/assets/$1 [L]
+RewriteRule ^(favicon\.svg|icons\.svg|subfondo\.jpeg)$ dist/$1 [L]
+RewriteRule ^$ dist/index.html [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ dist/index.html [L]

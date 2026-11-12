@@ -1,5 +1,9 @@
 # PROYECTO-GLOBAL-CONEXIT
 
+## Despliegue en Hostinger
+
+El frontend se compila desde `mini-erp` con `npm run build`. Vite genera el sitio en `dist/` en la raíz del repositorio; el `.htaccess` raíz lo sirve en `/` y deja las rutas `/backend` para PHP. Si el despliegue de Git no ejecuta el build, incluye en el repositorio el contenido generado en `dist/`.
+
 ## Facturación automática
 
 El proceso de facturación se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:
