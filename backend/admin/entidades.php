@@ -47,7 +47,7 @@ if (!isset($configuracion[$entidad])) {
 $definicion = $configuracion[$entidad];
 $tabla = $definicion["tabla"];
 $clave = $definicion["clave"];
-$baseDatos = "global_conexit";
+$baseDatos = (string) $pdo->query("SELECT DATABASE()")->fetchColumn();
 $metadatos = [];
 $idClienteContexto = null;
 

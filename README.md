@@ -4,6 +4,8 @@
 
 El frontend se compila desde `mini-erp` con `npm run build`. Vite genera el sitio en `dist/` en la raíz del repositorio; el `.htaccess` raíz lo sirve en `/` y deja las rutas `/backend` para PHP. Si el despliegue de Git no ejecuta el build, incluye en el repositorio el contenido generado en `dist/`.
 
+En desarrollo, el frontend usa `/backend` en el mismo origen y Vite reenvía esas solicitudes a XAMPP en `/PROYECTO-GLOBAL-CONEXIT/backend`. Si la carpeta del proyecto bajo `htdocs` tiene otro nombre, configura `VITE_PHP_PROJECT_PATH` con su ruta URL, por ejemplo `/mi-proyecto`.
+
 ## Facturación automática
 
 El proceso de facturación se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:

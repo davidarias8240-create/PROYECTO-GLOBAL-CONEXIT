@@ -1,6 +1,6 @@
 <?php
-require_once "../config/database.php";
-require_once "../config/session.php";
+require_once __DIR__ . "/../config/admin_auth.php";
+require_once __DIR__ . "/../config/form_validation.php";
 
 $method = $_SERVER["REQUEST_METHOD"];
 
