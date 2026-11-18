@@ -6,8 +6,6 @@ El frontend se compila desde `mini-erp` con `npm run build`. Vite genera el siti
 
 En desarrollo, el frontend usa `/backend` en el mismo origen y Vite reenvía esas solicitudes a XAMPP en `/PROYECTO-GLOBAL-CONEXIT/backend`. Si la carpeta del proyecto bajo `htdocs` tiene otro nombre, configura `VITE_PHP_PROJECT_PATH` con su ruta URL, por ejemplo `/mi-proyecto`.
 
-El backend toma la conexión de `DB_HOST`, `DB_NAME`, `DB_USER` y `DB_PASS` del entorno PHP. En Hostinger, configura esos valores en el entorno de PHP con los nombres exactos asignados por el panel (incluido el prefijo de `DB_NAME` y `DB_USER`); no publiques credenciales en el repositorio ni en un `.env` accesible desde la web. `DB_HOST` puede omitirse si MySQL está en `localhost`. Para peticiones locales a XAMPP se mantienen los valores locales actuales si no se definen variables.
-
 ## Facturación automática
 
 El proceso de facturación se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:
