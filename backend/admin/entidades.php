@@ -28,7 +28,14 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
     exit;
 }
 
-if (!administradorAutenticado($pdo)) {
+try {
+    $autenticado = administradorAutenticado($pdo);
+} catch (Throwable $exception) {
+    error_log("Error verificando sesión administrativa en CRUD: " . $exception->getMessage());
+    responder(["error" => "No se pudo validar la sesión administrativa"], 500);
+}
+
+if (!$autenticado) {
     http_response_code(401);
     echo json_encode(["error" => "Inicia sesión como administrador"], JSON_UNESCAPED_UNICODE);
     exit;
@@ -47,7 +54,7 @@ if (!isset($configuracion[$entidad])) {
 $definicion = $configuracion[$entidad];
 $tabla = $definicion["tabla"];
 $clave = $definicion["clave"];
-$baseDatos = "global_conexit";
+$baseDatos = $db;
 $metadatos = [];
 $idClienteContexto = null;
 
@@ -1644,12 +1651,14 @@ try {
         $pdo->rollBack();
     }
     error_log("Error en CRUD de " . $entidad . ": " . $exception->getMessage());
-    $code = $exception->getCode() === "23000" ? 409 : 422;
-    responder([
-        "error" => $code === 409
-            ? "El registro duplica un dato único o está relacionado con otros datos"
-            : "La operación no cumple las reglas de la base de datos"
-    ], $code);
+    $sqlState = (string) $exception->getCode();
+    if ($sqlState === "23000") {
+        responder(["error" => "El registro duplica un dato único o está relacionado con otros datos"], 409);
+    }
+    if (str_starts_with($sqlState, "22")) {
+        responder(["error" => "Los datos enviados no cumplen las reglas de la base de datos"], 422);
+    }
+    responder(["error" => "No se pudo completar la operación"], 500);
 } catch (Throwable $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
