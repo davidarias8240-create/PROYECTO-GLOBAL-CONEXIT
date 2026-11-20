@@ -1444,6 +1444,11 @@ main > * {
 :root[data-theme="dark"] .admin-shell .table tbody tr { background: #2b3033; }
 :root[data-theme="dark"] .admin-shell .table tbody tr:nth-child(even) { background: #303538; }
 :root[data-theme="dark"] .admin-shell .table tbody tr:hover { background: #39332e; }
+:root[data-theme="dark"] .admin-shell .list-group-item {
+  color: #e9e4de;
+  background-color: #2b3033;
+  border-color: #45494b;
+}
 :root[data-theme="dark"] .notification-bell-button { color: #d3ccc5; background: #303538; border-color: #4b5052; }
 :root[data-theme="dark"] .notification-bell-button:hover,
 :root[data-theme="dark"] .notification-bell-button[aria-expanded="true"] { color: #ff9a42; background: #3a2b20; }
