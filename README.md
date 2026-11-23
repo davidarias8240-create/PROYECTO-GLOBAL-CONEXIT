@@ -57,3 +57,50 @@ Get-Content -Raw .\mini-erp\Database\migracion_pagos_idempotencia.sql | & C:\xam
 ```
 
 La migración agrega la columna y el índice único a `global_conexit`; los pagos existentes se conservan sin cambios.
+
+## Pagos de facturas con Wompi
+
+El portal de clientes inicia los pagos con el Widget oficial de Wompi. La llave pública, la firma de integridad y el saldo en centavos los entrega el backend; la factura solo se marca pagada después de validar el webhook `transaction.updated` y consultar la transacción directamente en la API de Wompi. `backend/clientes/pagar_simulado.php` está deshabilitado y responde `410`.
+
+Antes de habilitar los pagos en una base existente, aplica la migración que crea los intentos de pago (los intentos pendientes no se insertan en `pago`):
+
+```powershell
+Get-Content -Raw .\mini-erp\Database\migracion_pagos_wompi.sql | & C:\xampp\mysql\bin\mysql.exe -u root -p
+```
+
+En una instalación nueva, la tabla también está incluida en `mini-erp\Database\datos_dashboard.sql`. Habilita la extensión PHP `curl` para que el webhook pueda verificar cada ID de transacción con la API de Wompi.
+
+Define estas variables en la configuración privada del servidor web o del sistema operativo; no las pongas en Vite, el frontend, `.htaccess` versionado ni en el repositorio. Reinicia Apache/PHP después de cambiarlas:
+
+| Variable | Uso |
+| --- | --- |
+| `WOMPI_ENVIRONMENT` | `sandbox` o `production`; controla el ambiente en que el portal inicia pagos. Por defecto es `sandbox`. |
+| `WOMPI_SANDBOX_PUBLIC_KEY` | Llave pública Sandbox (`pub_test_...`). |
+| `WOMPI_SANDBOX_INTEGRITY_SECRET` | Secreto de integridad Sandbox. |
+| `WOMPI_SANDBOX_EVENTS_SECRET` | Secreto de eventos Sandbox. |
+| `WOMPI_PRODUCTION_PUBLIC_KEY` | Llave pública Producción (`pub_prod_...`). |
+| `WOMPI_PRODUCTION_INTEGRITY_SECRET` | Secreto de integridad Producción. |
+| `WOMPI_PRODUCTION_EVENTS_SECRET` | Secreto de eventos Producción. |
+
+El servidor selecciona las llaves de inicio según `WOMPI_ENVIRONMENT`; los webhooks se validan con el secreto correspondiente al `environment` firmado en cada evento (`test` o `prod`). Se puede dejar la configuración de Producción definida sin activarla; no cambies `WOMPI_ENVIRONMENT` a `production` hasta que terminen las pruebas y el sitio use HTTPS.
+
+### Registrar el webhook
+
+1. Publica el backend en una URL HTTPS accesible desde internet.
+2. En el Dashboard de Comercios de Wompi, selecciona el ambiente Sandbox y registra como URL de eventos `https://<tu-dominio>/backend/webhooks/wompi.php`.
+3. Suscribe el evento `transaction.updated` y configura `WOMPI_SANDBOX_EVENTS_SECRET` con el secreto de eventos Sandbox del Dashboard.
+4. Para Producción, registra por separado esa URL en el ambiente Producción y configura su secreto distinto en `WOMPI_PRODUCTION_EVENTS_SECRET`. Wompi mantiene URLs de eventos separadas por ambiente.
+
+El webhook valida el checksum con las propiedades y el timestamp del evento, y contrasta el ID, referencia, estado, moneda y monto con la consulta servidor-a-servidor de la transacción. Los eventos repetidos no duplican el pago; si hay un intento pendiente, la factura no admite otro hasta que Wompi comunique un estado final.
+
+### Prueba manual en Sandbox
+
+1. Aplica la migración, configura las tres variables `WOMPI_SANDBOX_*`, verifica que `WOMPI_ENVIRONMENT=sandbox` y reinicia el servidor.
+2. Configura la URL HTTPS del webhook en el ambiente Sandbox y confirma que PHP tenga cURL habilitado.
+3. Crea o selecciona una factura real de prueba con saldo pendiente y entra al portal con su cuenta de cliente.
+4. Pulsa **Pagar factura**. Comprueba que se abra el Widget modal y completa una transacción con los datos de prueba publicados por Wompi para Sandbox.
+5. Al cerrar el Widget, el portal debe mostrar **Pago pendiente de confirmación**. No debe mostrar la factura pagada hasta que Wompi envíe el webhook válido.
+6. Después de recibir `transaction.updated` con estado `APPROVED`, recarga el portal y verifica que el saldo sea cero, la factura esté pagada y exista un único pago `REGISTRADO`. Reenvía el mismo evento desde las herramientas Sandbox para comprobar que no se duplica.
+7. Repite con una transacción rechazada o pendiente: no debe crearse un pago confirmado ni cambiar el saldo/estado de la factura. Los intentos pendientes bloquean un segundo cobro hasta recibir un estado final.
+
+No se almacenan datos de tarjeta ni se crean cobros recurrentes. El cliente inicia cada pago individualmente desde su factura.

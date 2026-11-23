@@ -103,7 +103,14 @@ try {
                 FROM pago pg
                 WHERE pg.id_factura = f.id_factura
                   AND pg.estado = 'REGISTRADO'
-            ), 0) AS total_pagado
+            ), 0) AS total_pagado,
+            (
+                SELECT ipw.estado
+                FROM intento_pago_wompi ipw
+                WHERE ipw.id_factura = f.id_factura
+                ORDER BY ipw.id_intento DESC
+                LIMIT 1
+            ) AS estado_ultimo_intento_wompi
          FROM factura f
          INNER JOIN contrato c ON c.id_contrato = f.id_contrato
          INNER JOIN periodo_facturacion pf ON pf.id_periodo = f.id_periodo
