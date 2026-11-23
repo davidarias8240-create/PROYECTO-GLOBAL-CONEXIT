@@ -1,5 +1,8 @@
 <?php
+use PHPMailer\PHPMailer\Exception as PHPMailerException;
+
 require_once __DIR__ . "/../config/database.php";
+require_once __DIR__ . "/../config/mailer.php";
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     http_response_code(405);
@@ -8,7 +11,7 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 }
 
 $data = json_decode(file_get_contents("php://input"), true);
-$requiredFields = ["nombre", "documento", "email", "telefono", "direccion", "plan"];
+$requiredFields = ["nombre", "documento", "email", "telefono", "direccion"];
 foreach ($requiredFields as $field) {
     if (!is_array($data) || !is_string($data[$field] ?? null) || trim($data[$field]) === "") {
         http_response_code(400);
@@ -45,7 +48,13 @@ $nombre = trim($data["nombre"]);
 $documento = trim($data["documento"]);
 $telefono = trim($data["telefono"]);
 $direccion = trim($data["direccion"]);
-$plan = trim($data["plan"]);
+$planId = filter_var($data["id_plan"] ?? null, FILTER_VALIDATE_INT);
+if ($planId === false || $planId < 1) {
+    http_response_code(400);
+    echo json_encode(["error" => "El plan seleccionado no es válido"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $partesDocumento = preg_split('/\s+/', $documento, 2);
 $tipoDocumento = strtoupper((string) ($partesDocumento[0] ?? ""));
 $numeroDocumento = (string) ($partesDocumento[1] ?? "");
@@ -72,15 +81,43 @@ if (preg_match('/^[0-9]{10}$/D', $telefono) !== 1) {
     echo json_encode(["error" => "El celular debe tener exactamente 10 dígitos, sin espacios ni caracteres especiales"], JSON_UNESCAPED_UNICODE);
     exit;
 }
-if (mb_strlen($direccion) > 255 || mb_strlen($plan) > 150) {
+if (mb_strlen($direccion) > 255) {
     http_response_code(400);
-    echo json_encode(["error" => "La dirección o el nombre del plan supera la longitud permitida"], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["error" => "La dirección supera la longitud permitida"], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 try {
+    $planStatement = $pdo->prepare(
+        "SELECT p.id_plan, p.nombre, p.velocidad, p.precio
+         FROM plan p
+         WHERE p.id_plan = :id_plan
+           AND p.estado = 'ACTIVO'
+           AND p.vigencia_inicio <= CURRENT_DATE()
+           AND (p.vigencia_fin IS NULL OR p.vigencia_fin >= CURRENT_DATE())
+           AND NOT EXISTS (
+               SELECT 1
+               FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci =
+                         'planes' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci =
+                         CAST(p.id_plan AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         LIMIT 1"
+    );
+    $planStatement->execute([":id_plan" => $planId]);
+    $planDetails = $planStatement->fetch();
+    if (!$planDetails) {
+        http_response_code(400);
+        echo json_encode(["error" => "El plan seleccionado ya no está disponible"], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $plan = (string) $planDetails["nombre"];
+    $email = trim($data["email"]);
+    $fechaSolicitud = new DateTimeImmutable("now", new DateTimeZone("America/Bogota"));
     $commercialAuthorizationAt = $commercialAuthorization
-        ? (new DateTimeImmutable("now", new DateTimeZone("America/Bogota")))->format(DATE_ATOM)
+        ? $fechaSolicitud->format(DATE_ATOM)
         : null;
     $message = sprintf(
         "Solicitud para el plan %s. Documento: %s. Dirección de instalación: %s. El titular autorizó el tratamiento de sus datos personales conforme a la Ley 1581 de 2012. Autorización para fines comerciales: %s%s.",
@@ -99,17 +136,18 @@ try {
     );
     $stmt->execute([
         ":nombre" => $nombre,
-        ":correo" => trim($data["email"]),
+        ":correo" => $email,
         ":telefono" => $telefono,
         ":mensaje" => $message
     ]);
+    $idSolicitud = (int) $pdo->lastInsertId();
 
     $audit = $pdo->prepare(
         "INSERT INTO auditoria (id_usuario, entidad, id_entidad, accion, detalle)
          VALUES (NULL, 'solicitud_servicio', :id_entidad, 'CREAR', :detalle)"
     );
     $audit->execute([
-        ":id_entidad" => (string) $pdo->lastInsertId(),
+        ":id_entidad" => (string) $idSolicitud,
         ":detalle" => json_encode(
             [
                 "tipo_solicitud" => "CONTRATACION",
@@ -121,10 +159,68 @@ try {
     ]);
     $pdo->commit();
 
+    $referencia = sprintf("SOL-%06d", $idSolicitud);
+    $detallesCorreo = [
+        "Estado" => "Solicitud Recibida",
+        "Orden de servicio (referencia de solicitud)" => $referencia,
+        "Fecha de recepción" => $fechaSolicitud->format("d/m/Y H:i:s"),
+        "Nombre completo" => $nombre,
+        "Documento" => $documento,
+        "Correo electrónico" => $email,
+        "Teléfono / celular" => $telefono,
+        "Dirección de instalación" => $direccion,
+        "Plan solicitado" => $plan,
+        "Velocidad" => (string) $planDetails["velocidad"],
+        "Precio mensual" => "COP " . number_format((float) $planDetails["precio"], 0, ",", "."),
+        "Autorización de tratamiento de datos" => "Sí",
+        "Autorización comercial" => $commercialAuthorization
+            ? "Sí (registrada el " . $commercialAuthorizationAt . ")"
+            : "No"
+    ];
+    $filasHtml = "";
+    $lineasTexto = ["Solicitud Recibida", ""];
+    foreach ($detallesCorreo as $etiqueta => $valor) {
+        $filasHtml .= "<tr><th style=\"padding:8px;text-align:left\">" .
+            htmlspecialchars($etiqueta, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8") .
+            "</th><td style=\"padding:8px\">" .
+            htmlspecialchars($valor, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8") .
+            "</td></tr>";
+        $lineasTexto[] = $etiqueta . ": " . $valor;
+    }
+
+    $asunto = "Solicitud Recibida - Orden de servicio " . $referencia;
+    $mensajeHtml = "<!doctype html><html lang=\"es\"><body>" .
+        "<h1>Solicitud Recibida</h1>" .
+        "<p>Hemos recibido la solicitud de cotización del plan. La referencia identifica esta solicitud de servicio; está pendiente de gestión por un representante.</p>" .
+        "<table style=\"border-collapse:collapse\">" . $filasHtml . "</table>" .
+        "</body></html>";
+    $mensajeTexto = implode("\n", $lineasTexto);
+
+    try {
+        enviarCorreo(
+            obtenerCorreoNotificaciones(),
+            $asunto,
+            $mensajeHtml,
+            $mensajeTexto,
+            $email,
+            $nombre
+        );
+        enviarCorreo($email, $asunto, $mensajeHtml, $mensajeTexto);
+    } catch (PHPMailerException | RuntimeException $exception) {
+        error_log("Error enviando correos para solicitud pública {$referencia}: " . $exception->getMessage());
+        http_response_code(500);
+        echo json_encode([
+            "error" => "La solicitud se registró, pero no se pudo enviar el correo. Referencia: " .
+                $referencia . ". No vuelvas a enviarla para evitar duplicados."
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     http_response_code(201);
     echo json_encode([
         "success" => true,
-        "message" => "Solicitud de contratación registrada correctamente"
+        "message" => "Solicitud Recibida correctamente",
+        "numero_solicitud" => $referencia
     ], JSON_UNESCAPED_UNICODE);
 } catch (PDOException $exception) {
     if ($pdo->inTransaction()) {
