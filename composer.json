@@ -1,0 +1,8 @@
+{
+    "name": "globalconexit/proyecto-global-conexit",
+    "description": "Backend PHP y utilidades de correo SMTP de Global Conexit",
+    "license": "proprietary",
+    "require": {
+        "phpmailer/phpmailer": "^7.2"
+    }
+}

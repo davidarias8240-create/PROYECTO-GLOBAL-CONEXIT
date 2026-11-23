@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { crearSolicitudPublica } from "../services/api";
+import ToastMessage from "./ToastMessage";
 import { sanitizeDocument, sanitizePhone, validateDocument, validateEmail } from "../utils/formValidation";
 
 function PlanCheckout({ plan, onClose }) {
 	const [step, setStep] = useState("details");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
+	const [successMessage, setSuccessMessage] = useState("");
 	const [fieldErrors, setFieldErrors] = useState({});
 
 	const validateField = (name, value, documentType) => {
@@ -57,6 +59,7 @@ function PlanCheckout({ plan, onClose }) {
 			telefono: String(formValues.telefono).trim(),
 			direccion: String(formValues.direccion).trim(),
 			plan: plan.name,
+			id_plan: plan.id,
 			autorizacion_tratamiento: formValues.autorizacionTratamiento === "on",
 			autorizacion_comercial: formValues.autorizacionComercial === "on",
 		};
@@ -64,6 +67,7 @@ function PlanCheckout({ plan, onClose }) {
 		try {
 			const result = await crearSolicitudPublica(newCustomer);
 			if (!result.success) throw new Error(result.message || "No fue posible registrar tus datos.");
+			setSuccessMessage("Solicitud Recibida correctamente");
 			setStep("confirmation");
 		} catch (submitError) {
 			setError(submitError.message || "No pudimos conectarnos. Intenta de nuevo en unos minutos.");
@@ -74,6 +78,7 @@ function PlanCheckout({ plan, onClose }) {
 
 	return (
 		<div className="plan-checkout-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+			<ToastMessage message={successMessage} onClose={() => setSuccessMessage("")} />
 			<section className="plan-checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
 				<header className="plan-checkout-header">
 					<div>

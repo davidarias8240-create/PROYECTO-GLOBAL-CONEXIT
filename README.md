@@ -4,7 +4,31 @@
 
 El frontend se compila desde `mini-erp` con `npm run build`. Vite genera el sitio en `dist/` en la raíz del repositorio; el `.htaccess` raíz lo sirve en `/` y deja las rutas `/backend` para PHP. Si el despliegue de Git no ejecuta el build, incluye en el repositorio el contenido generado en `dist/`.
 
-En desarrollo, el frontend usa `/backend` en el mismo origen y Vite reenvía esas solicitudes a XAMPP en `/PROYECTO-GLOBAL-CONEXIT/backend`. Si la carpeta del proyecto bajo `htdocs` tiene otro nombre, configura `VITE_PHP_PROJECT_PATH` con su ruta URL, por ejemplo `/mi-proyecto`.
+El frontend usa `/backend` en el mismo origen. Para desarrollo, ejecuta `npm run dev` desde `mini-erp`; Vite reenvía las solicitudes a XAMPP en `http://localhost/PROYECTO-GLOBAL-CONEXIT/backend`. Si la carpeta del proyecto bajo `htdocs` tiene otro nombre, configura `VITE_PHP_PROJECT_PATH` con su ruta URL, por ejemplo `/mi-proyecto`.
+
+## Correo saliente con PHPMailer
+
+Instala las dependencias desde la raíz del proyecto:
+
+```powershell
+composer install
+```
+
+En XAMPP, si Composer indica que falta ZIP, habilita `extension=zip` en `C:\xampp\php\php.ini` o ejecútalo temporalmente así:
+
+```powershell
+C:\xampp\php\php.exe -d extension=zip C:\ProgramData\ComposerSetup\bin\composer.phar install
+```
+
+Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa el usuario y la contraseña de aplicación SMTP. El archivo local está excluido de Git; no lo agregues al repositorio. Para recibir las solicitudes en otro buzón, agrega `notification_email` a ese arreglo; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+
+Desde un endpoint PHP, carga `backend/config/mailer.php` y llama:
+
+```php
+enviarCorreo("destinatario@dominio.com", "Asunto", "<p>Mensaje</p>");
+```
+
+La función lanza una excepción si falta configuración o si PHPMailer no puede enviar el correo; captura ese error en el endpoint que la invoque.
 
 ## Facturación automática
 
