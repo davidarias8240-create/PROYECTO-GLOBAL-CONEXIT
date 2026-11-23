@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
 	cerrarSesionCliente,
+	iniciarPagoWompi,
 	obtenerPerfilCliente,
 	obtenerPortalCliente,
-	pagarFacturaSimulada,
 	reportarFallaCliente,
 } from "../services/api";
 import ThemeToggle from "../components/ThemeToggle";
@@ -24,6 +24,34 @@ const moneyFormat = new Intl.NumberFormat("es-CO", {
 	currency: "COP",
 	maximumFractionDigits: 0,
 });
+
+let wompiWidgetPromise;
+
+function cargarWidgetWompi() {
+	if (window.WidgetCheckout) return Promise.resolve(window.WidgetCheckout);
+	if (wompiWidgetPromise) return wompiWidgetPromise;
+
+	wompiWidgetPromise = new Promise((resolve, reject) => {
+		const script = document.createElement("script");
+		script.src = "https://checkout.wompi.co/widget.js";
+		script.async = true;
+		script.referrerPolicy = "strict-origin-when-cross-origin";
+		script.onload = () => {
+			if (window.WidgetCheckout) resolve(window.WidgetCheckout);
+			else {
+				wompiWidgetPromise = null;
+				reject(new Error("Wompi no pudo cargar el Widget. Intenta nuevamente."));
+			}
+		};
+		script.onerror = () => {
+			wompiWidgetPromise = null;
+			reject(new Error("No se pudo cargar el Widget de Wompi. Revisa tu conexión e intenta nuevamente."));
+		};
+		document.head.appendChild(script);
+	});
+
+	return wompiWidgetPromise;
+}
 
 function formatMoney(value) {
 	return moneyFormat.format(Number(value) || 0);
@@ -251,21 +279,53 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 	);
 }
 
-function PaymentView({ factura, onPay, theme, onThemeToggle }) {
-	const [metodo, setMetodo] = useState("TARJETA");
-	const [mensaje, setMensaje] = useState("");
+function PaymentView({ factura, onPay, onPaymentReturn, refreshError, theme, onThemeToggle }) {
 	const [error, setError] = useState("");
 	const [pagando, setPagando] = useState(false);
+	const [abriendoWidget, setAbriendoWidget] = useState(false);
+	const [checkout, setCheckout] = useState(null);
+	const [pendienteConfirmacion, setPendienteConfirmacion] = useState(false);
+	const estadoIntento = factura?.estado_ultimo_intento_wompi;
 
-	const simularPago = async (event) => {
+	useEffect(() => {
+		if (estadoIntento && estadoIntento !== "PENDING") {
+			setPendienteConfirmacion(false);
+		}
+	}, [estadoIntento]);
+
+	const abrirWidget = async (datosCheckout) => {
+		setError("");
+		setAbriendoWidget(true);
+		try {
+			const WidgetCheckout = await cargarWidgetWompi();
+			const widget = new WidgetCheckout({
+				currency: datosCheckout.currency,
+				amountInCents: datosCheckout.amount_in_cents,
+				reference: datosCheckout.reference,
+				publicKey: datosCheckout.public_key,
+				signature: datosCheckout.signature,
+				expirationTime: datosCheckout.expiration_time,
+			});
+			widget.open(() => {
+				setPendienteConfirmacion(true);
+				onPaymentReturn();
+			});
+		} catch (widgetError) {
+			setError(widgetError.message);
+		} finally {
+			setAbriendoWidget(false);
+		}
+	};
+
+	const iniciarCheckout = async (event) => {
 		event.preventDefault();
 		setError("");
-		setMensaje("");
 		setPagando(true);
 		try {
-			const result = await onPay({ id_factura: factura.id_factura, medio: metodo });
-			setMensaje(`¡Pago simulado registrado! La factura ${result.factura.numero} quedó pagada.`);
-			window.alert(`¡Pago simulado realizado! La factura ${result.factura.numero} quedó pagada y el cambio se guardó en el sistema. No se hizo ningún cobro real.`);
+			const datosCheckout = await onPay(factura.id_factura);
+			setCheckout(datosCheckout);
+			setPendienteConfirmacion(true);
+			await abrirWidget(datosCheckout);
 		} catch (paymentError) {
 			setError(paymentError.message);
 		} finally {
@@ -273,37 +333,44 @@ function PaymentView({ factura, onPay, theme, onThemeToggle }) {
 		}
 	};
 
+	const tieneSaldo = facturaPendiente(factura);
+	const intentoEnProceso = estadoIntento === "PENDING" || pendienteConfirmacion;
+	const requiereRevision = estadoIntento === "APPROVED_REVIEW";
+
 	return (
 		<>
 			<ClientHeader title="Pagar Factura" subtitle="Consulta el saldo pendiente asociado a tu factura" theme={theme} onThemeToggle={onThemeToggle} />
 			<section className="payment-layout">
-				{!factura ? (
-					<div className="dashboard-card"><h3>No tienes facturas pendientes</h3><p>No hay un saldo pendiente disponible para pago.</p></div>
+				{!factura || !tieneSaldo ? (
+					<div className="dashboard-card" role="status">
+						<h3>{factura?.estado === "PAGADA" ? "Factura pagada" : "No tienes facturas pendientes"}</h3>
+						<p>{factura?.estado === "PAGADA" ? "La factura no tiene saldo pendiente." : "No hay un saldo pendiente disponible para pago."}</p>
+					</div>
 				) : (
 					<>
 						<div className="payment-due">
 							<div><small>Factura #{factura.numero}</small><strong>Período {formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}</strong><span>Vence {formatDate(factura.fecha_vencimiento)}</span></div>
 							<b>{formatMoney(factura.saldo)}<small>Saldo pendiente · COP</small></b>
 						</div>
-						<form className="dashboard-card payment-card" onSubmit={simularPago}>
-							<h3>Pago de demostración</h3>
+						<form className="dashboard-card payment-card" onSubmit={iniciarCheckout}>
+							<h3>Pago seguro con Wompi</h3>
 							<div className="payment-summary">
 								<Info label="Valor total" value={formatMoney(factura.total)} />
 								<Info label="Pagos registrados" value={formatMoney(factura.total_pagado)} />
 								<Info label="Saldo pendiente" value={formatMoney(factura.saldo)} />
 							</div>
-							<label className="simulation-label" htmlFor="payment-method">Método de pago
-								<select id="payment-method" value={metodo} onChange={(event) => setMetodo(event.target.value)}>
-									<option value="TARJETA">Tarjeta</option>
-									<option value="PSE">PSE</option>
-									<option value="TRANSFERENCIA">Transferencia</option>
-								</select>
-							</label>
-							<p className="helper-text">Pago de demostración: no se solicitan datos bancarios. El pago se registra como simulado y actualiza el estado de la factura.</p>
+							<p className="helper-text">El pago se procesa en el Widget seguro de Wompi. La factura solo se actualizará cuando recibamos la confirmación del servidor.</p>
+							{intentoEnProceso && <p className="payment-notice" role="status">Pago pendiente de confirmación de Wompi. No vuelvas a pagar esta factura mientras se procesa.</p>}
+							{estadoIntento === "DECLINED" && <p className="payment-notice" role="status">Wompi confirmó que el intento anterior no fue aprobado. Puedes iniciar un nuevo pago.</p>}
+							{["ERROR", "VOIDED"].includes(estadoIntento) && <p className="payment-notice" role="status">El intento anterior terminó sin aprobarse. Puedes iniciar un nuevo pago.</p>}
+							{requiereRevision && <p className="form-feedback error" role="alert">El pago requiere revisión. Comunícate con soporte antes de volver a intentarlo.</p>}
 							{error && <p className="form-feedback error" role="alert">{error}</p>}
-							{mensaje && <p className="simulation-feedback" role="status">{mensaje}</p>}
-							<button className="submit-button" type="submit" disabled={pagando || !facturaPendiente(factura)}>
-								{pagando ? "Registrando pago..." : facturaPendiente(factura) ? `Pagar ${formatMoney(factura.saldo)}` : "Factura pagada"}
+							{refreshError && <p className="form-feedback error" role="alert">{refreshError}</p>}
+							{checkout && error && <button className="secondary-button retry-payment-button" type="button" disabled={abriendoWidget} onClick={() => abrirWidget(checkout)}>
+								{abriendoWidget ? "Abriendo Widget..." : "Reintentar apertura del Widget"}
+							</button>}
+							<button className="submit-button" type="submit" disabled={pagando || abriendoWidget || intentoEnProceso || requiereRevision}>
+								{pagando ? "Preparando pago..." : abriendoWidget ? "Abriendo Wompi..." : intentoEnProceso ? "Pago pendiente de confirmación" : requiereRevision ? "Pago en revisión" : `Pagar factura · ${formatMoney(factura.saldo)}`}
 							</button>
 						</form>
 					</>
@@ -568,31 +635,16 @@ function ClientPortal() {
 		return result;
 	};
 
-	const handlePayment = async (payment) => {
-		const result = await pagarFacturaSimulada(payment);
-		setPortal((current) => {
-			const facturas = current.facturas.map((factura) => (
-				String(factura.id_factura) === String(result.factura.id_factura)
-					? { ...factura, ...result.factura, total_pagado: Number(factura.total_pagado) + Number(result.pago.valor) }
-					: factura
-			));
-			const resumen = facturas.reduce((totals, factura) => {
-				if (factura.estado !== "ANULADA") {
-					totals.pendiente += Number(factura.saldo);
-					totals.pagado += Number(factura.total_pagado);
-				}
-				return totals;
-			}, { pendiente: 0, pagado: 0 });
-			return {
-				...current,
-				facturas,
-				resumen: {
-					...resumen,
-					paz_y_salvo: current.contrato !== null && resumen.pendiente <= 0,
-				},
-			};
-		});
-		return result;
+	const handlePayment = (idFactura) => iniciarPagoWompi(idFactura);
+
+	const handlePaymentReturn = async () => {
+		try {
+			const latestPortal = await obtenerPortalCliente();
+			setPortal(latestPortal);
+			setPortalRefreshError("");
+		} catch (refreshError) {
+			setPortalRefreshError(refreshError.message);
+		}
 	};
 
 	if (loading) {
@@ -607,7 +659,7 @@ function ClientPortal() {
 		plan: <PlanView contrato={portal.contrato} theme={theme} onThemeToggle={toggleTheme} />,
 		cuenta: <ProfileView perfil={perfil} theme={theme} onThemeToggle={toggleTheme} />,
 		facturas: <InvoicesView facturas={portal.facturas} resumen={portal.resumen} setFacturaSeleccionada={setFacturaSeleccionada} setCurrentView={setCurrentView} theme={theme} onThemeToggle={toggleTheme} />,
-		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} theme={theme} onThemeToggle={toggleTheme} />,
+		pago: <PaymentView factura={facturaPendienteSeleccionada} onPay={handlePayment} onPaymentReturn={handlePaymentReturn} refreshError={portalRefreshError} theme={theme} onThemeToggle={toggleTheme} />,
 		paz: <CertificateView perfil={perfil} contrato={portal.contrato} resumen={portal.resumen} theme={theme} onThemeToggle={toggleTheme} />,
 		soporte: <SupportView perfil={perfil} tickets={portal.tickets} notificaciones={portal.notificaciones || []} refreshError={portalRefreshError} onReport={handleReport} theme={theme} onThemeToggle={toggleTheme} />,
 	};

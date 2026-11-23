@@ -30,8 +30,11 @@ export function obtenerPortalCliente() {
   return request("clientes/portal.php");
 }
 
-export function pagarFacturaSimulada(pago) {
-  return request("clientes/pagar_simulado.php", { method: "POST", body: pago });
+export function iniciarPagoWompi(idFactura) {
+  return request("clientes/iniciar_pago.php", {
+    method: "POST",
+    body: { id_factura: idFactura },
+  });
 }
 
 export function reportarFallaCliente(reporte) {
