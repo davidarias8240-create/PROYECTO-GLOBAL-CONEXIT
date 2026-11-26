@@ -50,6 +50,11 @@ function crearMailer(): PHPMailer
         throw new RuntimeException("El puerto SMTP configurado no es válido.");
     }
 
+    $encryption = strtolower(trim((string) ($config["encryption"] ?? "tls")));
+    if (!in_array($encryption, ["tls", "ssl"], true)) {
+        throw new RuntimeException("La encriptación SMTP debe ser 'tls' o 'ssl'.");
+    }
+
     $mailer = new PHPMailer(true);
     $mailer->isSMTP();
     $mailer->Host = (string) $config["host"];
@@ -60,7 +65,9 @@ function crearMailer(): PHPMailer
         $password = preg_replace('/\s+/', "", $password) ?? $password;
     }
     $mailer->Password = $password;
-    $mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $mailer->SMTPSecure = $encryption === "ssl"
+        ? PHPMailer::ENCRYPTION_SMTPS
+        : PHPMailer::ENCRYPTION_STARTTLS;
     $mailer->Port = $port;
     $mailer->CharSet = PHPMailer::CHARSET_UTF8;
     $mailer->setFrom(

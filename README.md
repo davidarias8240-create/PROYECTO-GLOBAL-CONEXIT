@@ -14,13 +14,17 @@ Instala las dependencias desde la raíz del proyecto:
 composer install
 ```
 
+En el hosting también debes desplegar la carpeta `vendor/` generada por Composer junto con el backend; no está incluida en Git.
+
 En XAMPP, si Composer indica que falta ZIP, habilita `extension=zip` en `C:\xampp\php\php.ini` o ejecútalo temporalmente así:
 
 ```powershell
 C:\xampp\php\php.exe -d extension=zip C:\ProgramData\ComposerSetup\bin\composer.phar install
 ```
 
-Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa el usuario y la contraseña de aplicación SMTP. El archivo local está excluido de Git; no lo agregues al repositorio. Para recibir las solicitudes en otro buzón, agrega `notification_email` a ese arreglo; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php`, completa los datos SMTP exactos de tu proveedor y sube ese archivo al hosting. El archivo local está excluido de Git; no lo agregues al repositorio. Configura `encryption` como `tls` con el puerto indicado para STARTTLS (frecuentemente 587), o `ssl` con el puerto indicado para SSL implícito (frecuentemente 465); confirma los valores con tu proveedor. Para recibir las solicitudes en otro buzón, cambia `notification_email`; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+
+Si el endpoint responde HTTP 500, consulta el `error_log` de PHP del hosting. El navegador solo muestra el estado HTTP; el log contiene el error de PHPMailer que permite identificar si falló la conexión, la autenticación o el certificado SMTP. No publiques ese log sin ocultar direcciones, usuarios y otros datos sensibles.
 
 Desde un endpoint PHP, carga `backend/config/mailer.php` y llama:
 
