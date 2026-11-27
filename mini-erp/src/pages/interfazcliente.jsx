@@ -10,6 +10,7 @@ import {
 import ThemeToggle from "../components/ThemeToggle";
 import ToastMessage from "../components/ToastMessage";
 import useTheme from "../hooks/useTheme";
+import { showErrorAlert, showInfoAlert, showSuccessAlert } from "../utils/alerts";
 
 const menuItems = [
 	{ id: "plan", icon: "▥", label: "Mi Plan" },
@@ -112,7 +113,7 @@ function ClientSidebar({ currentView, setCurrentView, perfil, facturas }) {
 			await cerrarSesionCliente();
 			navigate("/");
 		} catch (error) {
-			window.alert(error.message);
+			await showErrorAlert("No se pudo cerrar la sesión", error.message);
 		}
 	};
 
@@ -385,14 +386,10 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 	const [descripcion, setDescripcion] = useState("");
 	const [prioridad, setPrioridad] = useState("MEDIA");
 	const [enviando, setEnviando] = useState(false);
-	const [error, setError] = useState("");
-	const [mensaje, setMensaje] = useState("");
 	const [fieldErrors, setFieldErrors] = useState({});
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
-		setError("");
-		setMensaje("");
 		const normalizedAsunto = asunto.trim();
 		const normalizedDescripcion = descripcion.trim();
 		const errors = {};
@@ -411,9 +408,9 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 			setDescripcion("");
 			setPrioridad("MEDIA");
 			setFieldErrors({});
-			setMensaje(`Reporte ${result.ticket.id_ticket} guardado correctamente.`);
+			await showSuccessAlert("Reporte enviado", `El ticket ${result.ticket.id_ticket} se guardó correctamente.`);
 		} catch (reportError) {
-			setError(reportError.message);
+			await showErrorAlert("No se pudo enviar el reporte", reportError.message);
 		} finally {
 			setEnviando(false);
 		}
@@ -471,8 +468,6 @@ function SupportView({ perfil, tickets, notificaciones, refreshError, onReport, 
 						{fieldErrors.descripcion && <small className="form-feedback error" role="alert">{fieldErrors.descripcion}</small>}
 					</label>
 					<label>TELÉFONO DE CONTACTO<input value={perfil.telefono || "No registrado"} readOnly /></label>
-					{error && <p className="form-feedback error" role="alert">{error}</p>}
-					{mensaje && <p className="form-feedback" role="status">{mensaje}</p>}
 					<button className="submit-button" type="submit" disabled={enviando}>{enviando ? "Enviando reporte..." : "Crear ticket de soporte"}</button>
 				</form>
 				<section className="dashboard-card tickets">
@@ -546,7 +541,7 @@ function CertificateView({ perfil, contrato, resumen, theme, onThemeToggle }) {
 								<button
 									className="submit-button"
 									type="button"
-									onClick={() => window.alert("¡Paz y salvo generado! Esta es una simulación y no crea ni descarga un certificado oficial.")}
+									onClick={() => showInfoAlert("Paz y salvo generado", "Esta es una simulación y no crea ni descarga un certificado oficial.")}
 								>
 									Generar paz y salvo (simulación)
 								</button>
