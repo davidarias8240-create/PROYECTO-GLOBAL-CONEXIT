@@ -260,7 +260,10 @@ function passwordResetHandleRequest(string $role): void
         try {
             enviarCorreo($email, $subject, $html, $text);
         } catch (PHPMailerException | RuntimeException $exception) {
-            error_log("No se pudo enviar un correo de recuperación de contraseña.");
+            error_log(
+                "No se pudo enviar un correo de recuperación de contraseña: " .
+                get_class($exception) . ": " . $exception->getMessage()
+            );
         }
     } catch (Throwable $exception) {
         if ($pdo->inTransaction()) {
