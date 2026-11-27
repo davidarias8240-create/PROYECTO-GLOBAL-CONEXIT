@@ -205,22 +205,24 @@ try {
             $email,
             $nombre
         );
-        enviarCorreo($email, $asunto, $mensajeHtml, $mensajeTexto);
     } catch (PHPMailerException | RuntimeException $exception) {
-        error_log("Error enviando correos para solicitud pública {$referencia}: " . $exception->getMessage());
-        http_response_code(500);
-        echo json_encode([
-            "error" => "La solicitud se registró, pero no se pudo enviar el correo. Referencia: " .
-                $referencia . ". No vuelvas a enviarla para evitar duplicados."
-        ], JSON_UNESCAPED_UNICODE);
-        exit;
+        error_log("Error enviando notificación interna para solicitud pública {$referencia}: " . $exception->getMessage());
+    }
+
+    $emailEnviado = false;
+    try {
+        enviarCorreo($email, $asunto, $mensajeHtml, $mensajeTexto);
+        $emailEnviado = true;
+    } catch (PHPMailerException | RuntimeException $exception) {
+        error_log("Error enviando confirmación al cliente para solicitud pública {$referencia}: " . $exception->getMessage());
     }
 
     http_response_code(201);
     echo json_encode([
         "success" => true,
         "message" => "Solicitud Recibida correctamente",
-        "numero_solicitud" => $referencia
+        "numero_solicitud" => $referencia,
+        "email_enviado" => $emailEnviado
     ], JSON_UNESCAPED_UNICODE);
 } catch (PDOException $exception) {
     if ($pdo->inTransaction()) {
