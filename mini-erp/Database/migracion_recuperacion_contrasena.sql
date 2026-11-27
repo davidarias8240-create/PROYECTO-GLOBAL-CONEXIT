@@ -1,4 +1,4 @@
-USE u567671800_global_conexit;
+-- Select the target database in phpMyAdmin before importing this migration.
 
 CREATE TABLE IF NOT EXISTS recuperacion_contrasena (
     id_recuperacion BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

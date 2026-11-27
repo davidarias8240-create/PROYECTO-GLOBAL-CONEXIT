@@ -42,6 +42,7 @@ function passwordResetRoleScope(string $role): array
     if ($role === "CLIENTE") {
         return [
             "joins" => "INNER JOIN cliente c ON c.id_usuario = u.id_usuario",
+            "role_filter" => "AND r.nombre = 'CLIENTE'",
             "filters" => "
                 AND c.estado = 'ACTIVO'
                 AND NOT EXISTS (
@@ -54,7 +55,11 @@ function passwordResetRoleScope(string $role): array
     }
 
     if ($role === "ADMINISTRADOR") {
-        return ["joins" => "", "filters" => ""];
+        return [
+            "joins" => "",
+            "role_filter" => "AND r.nombre IN ('ADMINISTRADOR', 'ASESOR_COMERCIAL', 'TECNICO')",
+            "filters" => ""
+        ];
     }
 
     throw new RuntimeException("Rol de recuperación no válido.");
@@ -65,7 +70,7 @@ function passwordResetAccountFilters(string $role): string
     $scope = passwordResetRoleScope($role);
     return "
         AND u.estado = 'ACTIVO'
-        AND r.nombre = :rol
+        {$scope["role_filter"]}
         AND r.estado = 'ACTIVO'
         {$scope["filters"]}
         AND NOT EXISTS (
@@ -90,10 +95,10 @@ function passwordResetFindAccount(PDO $pdo, string $role, string $email): ?array
          FROM usuario u
          INNER JOIN rol r ON r.id_rol = u.id_rol
          {$scope["joins"]}
-         WHERE u.correo = :correo " . passwordResetAccountFilters($role) . "
+         WHERE LOWER(u.correo) = :correo " . passwordResetAccountFilters($role) . "
          LIMIT 1"
     );
-    $statement->execute([":correo" => $email, ":rol" => $role]);
+    $statement->execute([":correo" => $email]);
     $account = $statement->fetch();
     return $account ?: null;
 }
@@ -113,7 +118,7 @@ function passwordResetFindByToken(PDO $pdo, string $role, string $tokenHash, boo
            passwordResetAccountFilters($role) . "
          LIMIT 1" . ($lock ? " FOR UPDATE" : "")
     );
-    $statement->execute([":token_hash" => $tokenHash, ":rol" => $role]);
+    $statement->execute([":token_hash" => $tokenHash]);
     $account = $statement->fetch();
     return $account ?: null;
 }
@@ -183,7 +188,7 @@ function passwordResetValidEmail(string $email): bool
 {
     $domain = substr(strrchr($email, "@") ?: "", 1);
     return $email !== ""
-        && mb_strlen($email) <= 150
+        && strlen($email) <= 150
         && !preg_match('/\s/u', $email)
         && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
         && $domain !== ""
@@ -198,7 +203,7 @@ function passwordResetHandleRequest(string $role): void
     passwordResetRequireJson();
 
     $data = passwordResetReadBody();
-    $email = is_string($data["correo"] ?? null) ? mb_strtolower(trim($data["correo"])) : "";
+    $email = is_string($data["correo"] ?? null) ? strtolower(trim($data["correo"])) : "";
     if (!passwordResetValidEmail($email)) {
         passwordResetGenericResponse();
     }

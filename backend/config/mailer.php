@@ -25,6 +25,7 @@ function cargarConfiguracionMailer(): array
         "from_name" => "SMTP_FROM_NAME",
         "notification_email" => "SMTP_NOTIFICATION_EMAIL",
         "encryption" => "SMTP_ENCRYPTION",
+        "timeout" => "SMTP_TIMEOUT",
         "password_reset_base_url" => "PASSWORD_RESET_BASE_URL",
         "smtp_debug" => "SMTP_DEBUG",
     ];

@@ -1,0 +1,15 @@
+<?php
+
+return [
+    "host" => "smtp.gmail.com",
+    "port" => 465,
+    "encryption" => "ssl",
+    "username" => "tu-cuenta@gmail.com",
+    "password" => "REEMPLAZAR_CON_CONTRASENA_DE_APLICACION",
+    "from_email" => "tu-cuenta@gmail.com",
+    "from_name" => "Global Conexit",
+    "notification_email" => "tu-cuenta@gmail.com",
+    "password_reset_base_url" => "https://globalconexit.tech",
+    "timeout" => 15,
+    "smtp_debug" => false,
+];

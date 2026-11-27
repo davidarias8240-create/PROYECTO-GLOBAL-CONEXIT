@@ -11,7 +11,7 @@ El frontend usa `/backend` en el mismo origen. Para desarrollo, ejecuta `npm run
 Instala las dependencias desde la raíz del proyecto:
 
 ```powershell
-composer install
+composer install --no-dev --optimize-autoloader
 ```
 
 En XAMPP, si Composer indica que falta ZIP, habilita `extension=zip` en `C:\xampp\php\php.ini` o ejecútalo temporalmente así:
@@ -20,7 +20,7 @@ En XAMPP, si Composer indica que falta ZIP, habilita `extension=zip` en `C:\xamp
 C:\xampp\php\php.exe -d extension=zip C:\ProgramData\ComposerSetup\bin\composer.phar install
 ```
 
-Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa los datos SMTP del proveedor de correo. El archivo local está excluido de Git; no lo agregues al repositorio. También puedes definir `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_NOTIFICATION_EMAIL`, `SMTP_ENCRYPTION`, `SMTP_DEBUG` y `PASSWORD_RESET_BASE_URL` en el entorno del servidor; estas variables prevalecen sobre el archivo local. Usa `tls` con puerto 587 o `ssl` con puerto 465, según lo que indique tu proveedor. Para recibir las solicitudes en otro buzón, configura `notification_email` o `SMTP_NOTIFICATION_EMAIL`; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa los datos SMTP del proveedor. El archivo local está excluido de Git; no agregues credenciales al repositorio. También puedes definir `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_NOTIFICATION_EMAIL`, `SMTP_ENCRYPTION`, `SMTP_TIMEOUT`, `SMTP_DEBUG` y `PASSWORD_RESET_BASE_URL` en el entorno PHP del servidor; las variables no vacías prevalecen sobre el archivo local. Usa `tls` con puerto 587 o `ssl` con puerto 465, según el proveedor. En recuperación de contraseña, el destinatario es el correo de la cuenta encontrada, no `notification_email`. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
 
 Para diagnosticar temporalmente SMTP, configura `smtp_debug` como `true` en `backend\config\mail.local.php` o `SMTP_DEBUG=true` en el entorno PHP, genera una solicitud y revisa el log de errores de PHP. El diagnóstico registra las respuestas del servidor y no los comandos enviados por el cliente ni la contraseña. Desactiva esta opción después de la prueba.
 
@@ -36,13 +36,15 @@ La función lanza una excepción si falta configuración o si PHPMailer no puede
 
 ## Recuperación de contraseña
 
-Aplica una sola vez la migración de recuperación antes de habilitar los formularios:
+Aplica la migración una sola vez en la misma base de datos que usa la aplicación. En phpMyAdmin de Hostinger, selecciona primero la base de datos correcta y luego importa `mini-erp/Database/migracion_recuperacion_contrasena.sql`. La migración no selecciona una base por nombre, para que sirva tanto en XAMPP como en Hostinger. En XAMPP puedes ejecutarla así:
 
 ```powershell
-Get-Content -Raw .\mini-erp\Database\migracion_recuperacion_contrasena.sql | & C:\xampp\mysql\bin\mysql.exe -u root -p
+Get-Content -Raw .\mini-erp\Database\migracion_recuperacion_contrasena.sql | & C:\xampp\mysql\bin\mysql.exe -u root -p global_conexit
 ```
 
-Configura `password_reset_base_url` en `backend\config\mail.local.php` con el origen HTTPS canónico del sitio, por ejemplo `https://globalconexit.tech` (en desarrollo puede ser `http://localhost:5173`). También puedes configurar `PASSWORD_RESET_BASE_URL` en el entorno de PHP; si están definidas ambas opciones, prevalece la variable de entorno. En producción, sube `mail.local.php` al servidor Hostinger dentro de `backend/config/`; los archivos locales no se publican automáticamente. Esta URL es el dominio público de la aplicación que recibirán todos los usuarios en el enlace, no una URL individual. Los correos de recuperación reutilizan PHPMailer y las variables SMTP descritas arriba. Los enlaces vencen en 30 minutos, son de un solo uso y se invalidan al solicitar uno nuevo. Se limita cada IP a 10 solicitudes por hora; la respuesta no revela si el correo pertenece a una cuenta activa del rol solicitado.
+Configura `password_reset_base_url` en `backend\config\mail.local.php` con el origen HTTPS del sitio, por ejemplo `https://globalconexit.tech`; `PASSWORD_RESET_BASE_URL` del entorno PHP prevalece si está definida. Sube también `mail.local.php` a `backend/config/` en Hostinger, ya que el archivo local no se publica automáticamente. La recuperación de cliente verifica cuentas activas con rol `CLIENTE`; la recuperación administrativa verifica cuentas activas con rol `ADMINISTRADOR`, `ASESOR_COMERCIAL` o `TECNICO`, que son los roles admitidos por el inicio de sesión administrativo. Los enlaces vencen en 30 minutos, son de un solo uso y se invalidan al solicitar uno nuevo. Se limita cada IP a 10 solicitudes por hora; la respuesta no revela si existe la cuenta.
+
+Para Hostinger, asegúrate de que `vendor/autoload.php` esté en la raíz del proyecto: `mailer.php` carga PHPMailer desde esa ruta. Si tienes SSH, ejecuta `composer install --no-dev --optimize-autoloader` desde la raíz del proyecto. Si no tienes SSH, ejecútalo localmente y sube la carpeta `vendor/` generada junto con `composer.json` y `composer.lock`. No sobrescribas en el hosting la configuración de base de datos que ya usa el resto de la aplicación.
 
 Para capturar correos localmente, configura PHPMailer con `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none` y `SMTP_FROM_EMAIL=pruebas@example.test`. La opción `none` se acepta únicamente para SMTP local sin autenticación; puede usarse con Mailpit u otro servidor SMTP de pruebas. No uses esa opción en producción.
 
