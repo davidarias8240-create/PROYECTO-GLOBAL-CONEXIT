@@ -1,0 +1,4 @@
+<?php
+
+require_once __DIR__ . "/../auth/password_reset.php";
+passwordResetHandleRequest("ADMINISTRADOR");

@@ -259,6 +259,40 @@ textarea {
   transform: translateY(-2px);
 }
 
+.password-recovery-link,
+.password-recovery-back {
+  display: block;
+  margin: 18px auto 0;
+  padding: 0;
+  border: 0;
+  color: #b94d08;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.password-recovery-card .admin-login-heading {
+  margin-bottom: 24px;
+}
+
+.password-recovery-error,
+.password-recovery-message {
+  margin: 12px 0;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.password-recovery-error { color: #b42318; }
+.password-recovery-message { color: #28643a; }
+
+:root[data-theme="dark"] .password-recovery-link,
+:root[data-theme="dark"] .password-recovery-back { color: #ff9a42; }
+
+:root[data-theme="dark"] .password-recovery-error { color: #ff9a9f; }
+:root[data-theme="dark"] .password-recovery-message { color: #9de0ac; }
+
 @keyframes admin-card-in {
   from { opacity: 0; transform: translateX(-18px); }
   to { opacity: 1; transform: translateX(0); }
