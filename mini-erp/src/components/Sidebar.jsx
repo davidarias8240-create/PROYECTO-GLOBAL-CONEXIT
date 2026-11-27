@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/logo.png";
 import { cerrarSesionCliente } from "../services/api";
 import { adminEntities } from "../config/adminEntities";
+import { showErrorAlert } from "../utils/alerts";
 
 const sidebarGroups = [
     { label: "Administración", icon: "administration", keys: ["roles", "usuarios", "auditoria"] },
@@ -108,7 +109,7 @@ function Sidebar({ permisos, isOpen, onNavigate }) {
             await cerrarSesionCliente();
             navigate("/admin", { replace: true });
         } catch (error) {
-            window.alert(error.message);
+            await showErrorAlert("No se pudo cerrar la sesión", error.message);
         }
     };
 

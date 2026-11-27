@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPortal } from "react-dom";
 import Stepper, { Step } from "../components/Stepper";
+import { confirmAction, showErrorAlert, showSuccessAlert } from "../utils/alerts";
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
@@ -881,7 +882,12 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   };
 
   const handleCreateContractFromRequest = async (row) => {
-    if (!window.confirm(`¿Crear el contrato para el radicado SOL-${String(row[metadata.clave]).padStart(6, "0")}?`)) return;
+    const requestNumber = `SOL-${String(row[metadata.clave]).padStart(6, "0")}`;
+    if (!await confirmAction({
+      title: "¿Crear contrato?",
+      text: `Se creará un contrato para el radicado ${requestNumber}.`,
+      confirmButtonText: "Crear contrato",
+    })) return;
     setSaving(true);
     setError("");
     setNotice("");
@@ -889,9 +895,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       await guardarRegistroEntidad("solicitudes", {
         datos: { estado: "ATENDIDA" },
       }, row[metadata.clave], customerId);
+      await showSuccessAlert("Solicitud atendida", `Se creó el contrato para el radicado ${requestNumber}.`);
       navigate("/contratos", { state: { solicitud: row } });
     } catch (saveError) {
-      setError(saveError.message);
+      await showErrorAlert("No se pudo crear el contrato", saveError.message);
     } finally {
       setSaving(false);
     }
@@ -914,10 +921,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       setSelectedTicket(detail);
       setTicketStatus(detail.ticket.estado);
       setTicketComment("");
-      setNotice("Seguimiento del ticket actualizado.");
+      await showSuccessAlert("Seguimiento actualizado", "Los cambios del ticket se guardaron correctamente.");
       await loadData();
     } catch (saveError) {
-      setError(saveError.message);
+      await showErrorAlert("No se pudo actualizar el ticket", saveError.message);
     } finally {
       setSavingTicket(false);
     }
@@ -1275,10 +1282,13 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
       await guardarRegistroEntidad(entity, payload, editingId, customerId);
       closeForm();
-      setNotice(editingId ? "Cambios guardados." : "Registro creado.");
+      await showSuccessAlert(
+        editingId ? "Cambios guardados" : "Registro creado",
+        editingId ? "La información se actualizó correctamente." : "El registro se creó correctamente.",
+      );
       await loadData(entity === "clientes" ? search.trim() : "");
     } catch (saveError) {
-      setError(saveError.message);
+      await showErrorAlert("No se pudo guardar el registro", saveError.message);
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -1287,16 +1297,24 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   const handleArchive = async (row) => {
     const id = row[metadata.clave];
-    if (!window.confirm(`¿Desactivar este registro de ${metadata.titulo.toLowerCase()}? Podrás reactivarlo después.`)) return;
+    const isUser = entity === "usuarios";
+    if (!await confirmAction({
+      title: `¿${isUser ? "Deshabilitar" : "Desactivar"} este registro?`,
+      text: "Podrás reactivarlo después desde la sección de registros desactivados.",
+      confirmButtonText: isUser ? "Deshabilitar" : "Desactivar",
+    })) return;
 
     setError("");
     setNotice("");
     try {
       await desactivarRegistroEntidad(entity, id, customerId);
-      setNotice("Registro desactivado. Puedes reactivarlo desde Desactivados.");
+      await showSuccessAlert(
+        isUser ? "El usuario fue deshabilitado correctamente" : "Registro desactivado correctamente",
+        isUser ? "" : "Puedes reactivarlo desde Registros desactivados.",
+      );
       await loadData(entity === "clientes" ? search.trim() : "");
     } catch (archiveError) {
-      setError(archiveError.message);
+      await showErrorAlert("No se pudo desactivar el registro", archiveError.message);
     }
   };
 

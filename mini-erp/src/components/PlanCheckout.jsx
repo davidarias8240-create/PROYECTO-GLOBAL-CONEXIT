@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { crearSolicitudPublica } from "../services/api";
-import ToastMessage from "./ToastMessage";
 import { sanitizePhone, validateEmail } from "../utils/formValidation";
+import { showErrorAlert, showSuccessAlert } from "../utils/alerts";
 
 function sanitizeIdentityDocument(value) {
 	return value.replace(/\D/g, "").slice(0, 20);
@@ -10,8 +10,6 @@ function sanitizeIdentityDocument(value) {
 function PlanCheckout({ plan, onClose }) {
 	const [step, setStep] = useState("details");
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [error, setError] = useState("");
-	const [successMessage, setSuccessMessage] = useState("");
 	const [emailSent, setEmailSent] = useState(false);
 	const [requestReference, setRequestReference] = useState("");
 	const [fieldErrors, setFieldErrors] = useState({});
@@ -42,7 +40,6 @@ function PlanCheckout({ plan, onClose }) {
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
-		setError("");
 		const formData = new FormData(event.currentTarget);
 		const formValues = Object.fromEntries(formData.entries());
 		const documentType = String(formValues.tipoDocumento);
@@ -72,12 +69,19 @@ function PlanCheckout({ plan, onClose }) {
 		try {
 			const result = await crearSolicitudPublica(newCustomer);
 			if (!result.success) throw new Error(result.message || "No fue posible registrar tus datos.");
-			setSuccessMessage("Solicitud Recibida correctamente");
 			setEmailSent(result.email_enviado === true);
 			setRequestReference(result.numero_solicitud || "");
+			const reference = result.numero_solicitud ? ` Referencia: ${result.numero_solicitud}.` : "";
+			const emailStatus = result.email_enviado
+				? "Enviamos la confirmación a tu correo."
+				: "La solicitud se registró, pero no pudimos enviar la confirmación por correo.";
+			await showSuccessAlert("Solicitud recibida", `${emailStatus}${reference}`);
 			setStep("confirmation");
 		} catch (submitError) {
-			setError(submitError.message || "No pudimos conectarnos. Intenta de nuevo en unos minutos.");
+			await showErrorAlert(
+				"No se pudo enviar la solicitud",
+				submitError.message || "No pudimos conectarnos. Intenta de nuevo en unos minutos.",
+			);
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -85,7 +89,6 @@ function PlanCheckout({ plan, onClose }) {
 
 	return (
 		<div className="plan-checkout-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-			<ToastMessage message={successMessage} onClose={() => setSuccessMessage("")} />
 			<section className="plan-checkout" role="dialog" aria-modal="true" aria-labelledby="checkout-title">
 				<header className="plan-checkout-header">
 					<div>
@@ -153,7 +156,6 @@ function PlanCheckout({ plan, onClose }) {
 								Autorizo a Global Conexit a tratar mis datos para enviarme información comercial y publicitaria sobre sus productos, planes, ofertas y promociones por correo, teléfono o WhatsApp. Esta autorización es voluntaria, no condiciona mi solicitud y puedo revocarla a través de los canales de atención.
 							</span>
 						</label>
-						{error && <p className="checkout-error" role="alert">{error}</p>}
 						<button className="checkout-submit" type="submit" disabled={isSubmitting}>
 							{isSubmitting ? "Enviando solicitud..." : "Enviar solicitud"}
 						</button>

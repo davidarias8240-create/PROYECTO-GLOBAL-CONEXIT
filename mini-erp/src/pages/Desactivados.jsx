@@ -5,6 +5,7 @@ import {
   reactivarRegistroEntidad,
 } from "../services/api";
 import { adminEntities } from "../config/adminEntities";
+import { confirmAction, showErrorAlert, showSuccessAlert } from "../utils/alerts";
 
 function humanize(name) {
   return name.replace(/^id_/, "ID ").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -43,15 +44,20 @@ function Desactivados() {
   }, [loadArchived]);
 
   const handleRestore = async (entity, id) => {
+    if (!await confirmAction({
+      title: "¿Reactivar este registro?",
+      text: "El registro volverá a estar disponible en su listado.",
+      confirmButtonText: "Reactivar",
+    })) return;
     setRestoring(`${entity}:${id}`);
     setError("");
     setNotice("");
     try {
       await reactivarRegistroEntidad(entity, id);
-      setNotice("Registro reactivado correctamente.");
+      await showSuccessAlert("Registro reactivado", "El registro se reactivó correctamente.");
       await loadArchived();
     } catch (restoreError) {
-      setError(restoreError.message);
+      await showErrorAlert("No se pudo reactivar el registro", restoreError.message);
     } finally {
       setRestoring("");
     }
