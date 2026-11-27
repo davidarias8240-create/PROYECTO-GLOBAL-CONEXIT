@@ -1,4 +1,4 @@
-USE global_conexit;
+USE u567671800_global_conexit;
 
 CREATE TABLE IF NOT EXISTS recuperacion_contrasena (
     id_recuperacion BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

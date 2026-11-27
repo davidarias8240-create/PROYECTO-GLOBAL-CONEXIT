@@ -33,7 +33,6 @@ function DashboardLayout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
     const [permisos, setPermisos] = useState(null);
-    const [authorized, setAuthorized] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [theme, toggleTheme] = useTheme();
     const [welcomeMessage, setWelcomeMessage] = useState(
@@ -89,7 +88,6 @@ function DashboardLayout({ children }) {
     return (
         <div className="admin-shell d-flex" data-theme={theme}>
             <ToastMessage message={welcomeMessage} onClose={dismissWelcome} />
-            <Sidebar permisos={permisos} />
             <button
                 className={`sidebar-backdrop${isSidebarOpen ? " is-visible" : ""}`}
                 type="button"
@@ -98,7 +96,11 @@ function DashboardLayout({ children }) {
                 tabIndex={isSidebarOpen ? 0 : -1}
                 onClick={() => setIsSidebarOpen(false)}
             />
-            <Sidebar isOpen={isSidebarOpen} onNavigate={() => setIsSidebarOpen(false)} />
+            <Sidebar
+                permisos={permisos}
+                isOpen={isSidebarOpen}
+                onNavigate={() => setIsSidebarOpen(false)}
+            />
             <div className="admin-content flex-grow-1">
                 <Navbar
                     theme={theme}

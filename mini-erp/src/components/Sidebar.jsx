@@ -75,8 +75,7 @@ function SidebarIcon({ name, className = "" }) {
     );
 }
 
-function Sidebar({ permisos }) {
-function Sidebar({ isOpen, onNavigate }) {
+function Sidebar({ permisos, isOpen, onNavigate }) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const groupedKeys = new Set(sidebarGroups.flatMap(({ keys }) => keys));
@@ -121,15 +120,15 @@ function Sidebar({ isOpen, onNavigate }) {
 
             <nav className="sidebar-navigation" aria-label="Navegación administrativa">
                 {permisos.dashboard && (
-                    <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard">
+                    <NavLink
+                        className="nav-link sidebar-dashboard-link"
+                        to="/dashboard"
+                        onClick={onNavigate}
+                    >
                         <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
                         <span>Dashboard</span>
                     </NavLink>
                 )}
-                <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard" onClick={onNavigate}>
-                    <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
-                    <span>Dashboard</span>
-                </NavLink>
                 {groups.map(({ label, icon, entities }) => (
                     <section className="sidebar-group" key={label}>
                         <button
@@ -162,26 +161,18 @@ function Sidebar({ isOpen, onNavigate }) {
                         </ul>
                     </section>
                 ))}
-                <section className="sidebar-group">
-                    {permisos.desactivados && (
+                {permisos.desactivados && (
+                    <section className="sidebar-group">
                         <ul className="nav nav-pills flex-column sidebar-subcategories">
                             <li className="nav-item">
-                                <NavLink className="nav-link" to="/desactivados">
+                                <NavLink className="nav-link" to="/desactivados" onClick={onNavigate}>
                                     <SidebarIcon name="history" className="sidebar-subcategory-icon" />
                                     <span>Desactivados</span>
                                 </NavLink>
                             </li>
                         </ul>
-                    )}
-                    <ul className="nav nav-pills flex-column sidebar-subcategories">
-                        <li className="nav-item">
-                            <NavLink className="nav-link" to="/desactivados" onClick={onNavigate}>
-                                <SidebarIcon name="history" className="sidebar-subcategory-icon" />
-                                <span>Desactivados</span>
-                            </NavLink>
-                        </li>
-                    </ul>
-                </section>
+                    </section>
+                )}
             </nav>
             <button type="button" className="admin-logout" onClick={handleLogout}>
                 <span aria-hidden="true">⇥</span>Cerrar sesión
