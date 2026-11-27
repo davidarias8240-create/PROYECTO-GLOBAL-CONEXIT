@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 import Formcliente from "../components/Formcliente";
@@ -101,6 +102,8 @@ const portalItems = [
 ];
 
 function Home() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const landingPageRef = useRef(null);
 	const heroTitleRef = useRef(null);
 	const speedTestRef = useRef(null);
@@ -108,7 +111,7 @@ function Home() {
 	const speedTestStartedRef = useRef(false);
 	const initialLoadStartedAtRef = useRef(0);
 	const [theme, toggleTheme] = useTheme();
-	const [showClientLogin, setShowClientLogin] = useState(false);
+	const [showClientLogin, setShowClientLogin] = useState(() => Boolean(location.state?.openClientLogin));
 	const [selectedPlan, setSelectedPlan] = useState(null);
 	const [plansState, setPlansState] = useState({ status: "loading", items: [], error: "" });
 	const [plansReload, setPlansReload] = useState(0);
@@ -119,6 +122,11 @@ function Home() {
 	useEffect(() => {
 		initialLoadStartedAtRef.current = Date.now();
 	}, []);
+
+	useEffect(() => {
+		if (!location.state?.openClientLogin) return;
+		navigate(location.pathname, { replace: true, state: null });
+	}, [location.pathname, location.state, navigate]);
 
 	useEffect(() => {
 		if (plansState.status === "loading" || activeClientsState.status === "loading") return undefined;
@@ -541,6 +549,28 @@ function Home() {
 				.landing-nav .theme-toggle { border-radius:var(--star-border-radius, 8px); }
 				@media (max-width:800px) { .landing-nav { gap:8px; padding:0 12px; } .landing-logo { width:clamp(108px, 33vw, 150px); height:58px; } .portal-button { padding:10px 11px; font-size:12px; } }
 				@media (max-width:380px) { .landing-nav { gap:6px; padding:0 10px; } .landing-logo { width:clamp(92px, 28vw, 108px); } .portal-button { padding:9px 8px; font-size:11px; } }
+				@media (max-width:520px) {
+					.hero-copy, .hero-visual, .section-heading, .plan, .portal-card, .portal-banner, .footer-grid > div { min-width:0; }
+					.hero h1, .section-title, .plan h3, .plan li, .hero p, .section-subtitle, .portal-card-title, .portal-card-copy, .portal-banner h2, .portal-banner p, .footer p, .footer a, .footer-bottom span { overflow-wrap:anywhere; }
+					.hero h1 { font-size:clamp(36px, 10vw, 48px); letter-spacing:-1.5px; line-height:1; }
+					.section-title { font-size:clamp(30px, 8vw, 40px); letter-spacing:-.5px; line-height:1.08; }
+					.hero p, .section-subtitle { font-size:clamp(15px, 4vw, 17px); line-height:1.55; }
+					.hero-stats { flex-wrap:wrap; gap:18px 24px; }
+					.hero-stats > div { min-width:0; }
+					.hero-stats span { display:block; font-size:13px; overflow-wrap:anywhere; }
+					.plan { padding:25px 20px 22px; }
+					.speed { flex-wrap:wrap; }
+					.speed span { max-width:100%; overflow-wrap:anywhere; }
+					.portal-card-copy { font-size:15px; }
+					.portal-banner h2 { font-size:clamp(23px, 6vw, 28px); }
+					.footer-bottom { min-width:0; font-size:13px; }
+				}
+				@media (max-width:360px) {
+					.hero h1 { font-size:34px; }
+					.hero-inner { padding-right:16px; padding-left:16px; }
+					.section { padding-right:14px; padding-left:14px; }
+					.plan { padding-right:16px; padding-left:16px; }
+				}
 				.landing-bottom-nav { display:none; }
 				@media (max-width:800px) {
 					.landing-bottom-nav { position:fixed; z-index:10; right:0; bottom:0; left:0; height:calc(68px + env(safe-area-inset-bottom)); display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); padding:7px 8px env(safe-area-inset-bottom); border-top:1px solid var(--gc-border); background:rgba(255,254,250,.96); box-shadow:0 -8px 26px #21160a12; backdrop-filter:blur(16px); }

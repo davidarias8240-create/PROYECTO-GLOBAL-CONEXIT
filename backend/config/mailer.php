@@ -54,7 +54,7 @@ function obtenerCorreoNotificaciones(): string
 function crearMailer(): PHPMailer
 {
     $config = cargarConfiguracionMailer();
-    foreach (["host", "port", "username", "password"] as $field) {
+    foreach (["host", "port"] as $field) {
         if (!isset($config[$field]) || trim((string) $config[$field]) === "") {
             throw new RuntimeException("Falta configurar el campo SMTP '{$field}'.");
         }
@@ -65,30 +65,50 @@ function crearMailer(): PHPMailer
         throw new RuntimeException("El puerto SMTP configurado no es válido.");
     }
 
-    $mailer = new PHPMailer(true);
-    $mailer->isSMTP();
-    $mailer->Host = (string) $config["host"];
-    $mailer->SMTPAuth = true;
-    $mailer->Username = (string) $config["username"];
-    $password = (string) $config["password"];
-    if (strcasecmp($mailer->Host, "smtp.gmail.com") === 0) {
-        $password = preg_replace('/\s+/', "", $password) ?? $password;
-    }
-    $mailer->Password = $password;
+    $host = trim((string) $config["host"]);
     $encryption = strtolower(trim((string) ($config["encryption"] ?? "")));
     if ($encryption === "") {
         $encryption = $port === 465 ? "ssl" : "tls";
     }
-    if (!in_array($encryption, ["tls", "ssl"], true)) {
-        throw new RuntimeException("La seguridad SMTP debe ser 'tls' o 'ssl'.");
+    if (!in_array($encryption, ["tls", "ssl", "none"], true)) {
+        throw new RuntimeException("La seguridad SMTP debe ser 'tls', 'ssl' o 'none'.");
     }
-    $mailer->SMTPSecure = $encryption === "ssl"
-        ? PHPMailer::ENCRYPTION_SMTPS
-        : PHPMailer::ENCRYPTION_STARTTLS;
+    if ($encryption === "none"
+        && !in_array(strtolower($host), ["localhost", "127.0.0.1", "::1"], true)) {
+        throw new RuntimeException("SMTP sin cifrado solo está permitido en un servidor local.");
+    }
+    if ($encryption !== "none") {
+        foreach (["username", "password"] as $field) {
+            if (!isset($config[$field]) || trim((string) $config[$field]) === "") {
+                throw new RuntimeException("Falta configurar el campo SMTP '{$field}'.");
+            }
+        }
+    }
+
+    $mailer = new PHPMailer(true);
+    $mailer->isSMTP();
+    $mailer->Host = $host;
+    $mailer->SMTPAuth = $encryption !== "none";
+    $mailer->SMTPAutoTLS = $encryption !== "none";
+    $mailer->Username = (string) ($config["username"] ?? "");
+    $password = (string) ($config["password"] ?? "");
+    if (strcasecmp($mailer->Host, "smtp.gmail.com") === 0) {
+        $password = preg_replace('/\s+/', "", $password) ?? $password;
+    }
+    $mailer->Password = $password;
+    $mailer->SMTPSecure = match ($encryption) {
+        "ssl" => PHPMailer::ENCRYPTION_SMTPS,
+        "tls" => PHPMailer::ENCRYPTION_STARTTLS,
+        default => "",
+    };
     $mailer->Port = $port;
     $mailer->CharSet = PHPMailer::CHARSET_UTF8;
+    $fromEmail = trim((string) ($config["from_email"] ?? ""));
+    if ($fromEmail === "") {
+        $fromEmail = $mailer->Username;
+    }
     $mailer->setFrom(
-        trim((string) ($config["from_email"] ?? "")) ?: $mailer->Username,
+        $fromEmail,
         (string) ($config["from_name"] ?? "Global Conexit")
     );
 

@@ -104,7 +104,13 @@ function Formcliente({ onClose }) {
                         <button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showPassword ? "◉" : "◌"}</button>
                     </div>
                     {error && <p className="client-login-error" role="alert">{error}</p>}
-                    <button className="client-login-forgot" type="button">¿Olvidaste tu contraseña?</button>
+                    <button
+                        className="client-login-forgot"
+                        type="button"
+                        onClick={() => navigate("/recuperar-contrasena/cliente")}
+                    >
+                        ¿Olvidaste tu contraseña?
+                    </button>
                     <button className="client-login-submit" type="submit" disabled={isSubmitting}>
                         {isSubmitting ? "Validando..." : "Ingresar al Portal"}
                     </button>

@@ -32,6 +32,18 @@ enviarCorreo("destinatario@dominio.com", "Asunto", "<p>Mensaje</p>");
 
 La función lanza una excepción si falta configuración o si PHPMailer no puede enviar el correo; captura ese error en el endpoint que la invoque.
 
+## Recuperación de contraseña
+
+Aplica una sola vez la migración de recuperación antes de habilitar los formularios:
+
+```powershell
+Get-Content -Raw .\mini-erp\Database\migracion_recuperacion_contrasena.sql | & C:\xampp\mysql\bin\mysql.exe -u root -p
+```
+
+Configura `PASSWORD_RESET_BASE_URL` con el origen HTTPS canónico del sitio, por ejemplo `https://globalconexit.tech` (en desarrollo puede ser `http://localhost:5173`). Los correos de recuperación reutilizan PHPMailer y las variables SMTP descritas arriba. Los enlaces vencen en 30 minutos, son de un solo uso y se invalidan al solicitar uno nuevo. Se limita cada IP a 10 solicitudes por hora; la respuesta no revela si el correo pertenece a una cuenta activa del rol solicitado.
+
+Para capturar correos localmente, configura PHPMailer con `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none` y `SMTP_FROM_EMAIL=pruebas@example.test`. La opción `none` se acepta únicamente para SMTP local sin autenticación; puede usarse con Mailpit u otro servidor SMTP de pruebas. No uses esa opción en producción.
+
 ## Facturación automática
 
 El proceso de facturación se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:

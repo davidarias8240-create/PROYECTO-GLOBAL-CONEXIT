@@ -76,6 +76,7 @@ function SidebarIcon({ name, className = "" }) {
 }
 
 function Sidebar({ permisos }) {
+function Sidebar({ isOpen, onNavigate }) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const groupedKeys = new Set(sidebarGroups.flatMap(({ keys }) => keys));
@@ -113,7 +114,7 @@ function Sidebar({ permisos }) {
     };
 
     return (
-        <aside className="sidebar">
+        <aside id="admin-navigation-sidebar" className={`sidebar${isOpen ? " is-open" : ""}`}>
             <div className="sidebar-logo-wrap">
                 <img src={logo} alt="Global Conexit" className="sidebar-logo" />
             </div>
@@ -125,6 +126,10 @@ function Sidebar({ permisos }) {
                         <span>Dashboard</span>
                     </NavLink>
                 )}
+                <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard" onClick={onNavigate}>
+                    <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
+                    <span>Dashboard</span>
+                </NavLink>
                 {groups.map(({ label, icon, entities }) => (
                     <section className="sidebar-group" key={label}>
                         <button
@@ -148,7 +153,7 @@ function Sidebar({ permisos }) {
                         >
                             {entities.map(({ key, label: entityLabel }) => (
                                 <li className="nav-item" key={key}>
-                                    <NavLink className="nav-link" to={`/${key}`}>
+                                    <NavLink className="nav-link" to={`/${key}`} onClick={onNavigate}>
                                         <SidebarIcon name={entityIcons[key] ?? "archive"} className="sidebar-subcategory-icon" />
                                         <span>{entityLabel}</span>
                                     </NavLink>
@@ -168,6 +173,14 @@ function Sidebar({ permisos }) {
                             </li>
                         </ul>
                     )}
+                    <ul className="nav nav-pills flex-column sidebar-subcategories">
+                        <li className="nav-item">
+                            <NavLink className="nav-link" to="/desactivados" onClick={onNavigate}>
+                                <SidebarIcon name="history" className="sidebar-subcategory-icon" />
+                                <span>Desactivados</span>
+                            </NavLink>
+                        </li>
+                    </ul>
                 </section>
             </nav>
             <button type="button" className="admin-logout" onClick={handleLogout}>
