@@ -299,7 +299,7 @@ function Home() {
 	const gaugeAngle = Math.min(90, Math.max(-90, -90 + (gaugeValue / 700) * 180));
 
 	return (
-		<div className="landing-page" data-theme={theme} ref={landingPageRef}>
+		<div id="inicio" className="landing-page" data-theme={theme} ref={landingPageRef}>
 			{showClientLogin && <Formcliente onClose={() => setShowClientLogin(false)} />}
 			{selectedPlan && <PlanCheckout plan={selectedPlan} onClose={() => setSelectedPlan(null)} />}
 			{isInitialLoading && (
@@ -486,6 +486,8 @@ function Home() {
 				.whatsapp:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(37, 211, 102, 0.55); }
 				.whatsapp svg { display:block; width:32px; height:32px; }
 				.admin-access { position:fixed; left:12px; bottom:12px; z-index:9; padding:9px 14px; border-radius:8px; color:white; background:var(--ink); font-size:12px; font-weight:700; text-decoration:none; opacity:0; pointer-events:auto; transition:opacity .2s ease, transform .2s ease; transform:translateY(4px); }
+				.admin-access-desktop { gap:8px; }
+				.admin-access-mobile { display:none; }
 				.admin-access:hover, .admin-access:focus-visible { opacity:1; transform:translateY(0); outline:2px solid var(--gold); outline-offset:3px; }
 				@media (prefers-reduced-motion: reduce) { .scroll-reveal, .scroll-reveal.is-visible { opacity:1; translate:none; filter:none; transition:none; } .hero-visual img, .meter::after { animation:none; } .hero-visual img, .plan, .plan .primary-button, .portal-button, .primary-button, .meter, .benefit, .benefit-icon, .portal-card, .portal-icon, .portal-card::before, .footer-grid > div, .footer a, .landing-logo { transition:none; } .hero-visual:hover img, .plan:not(.featured):hover, .plan:not(.featured):focus-within, .plan.featured:hover, .plan.featured:focus-within, .plan:hover .primary-button, .plan:focus-within .primary-button, .portal-card:hover, .benefit:hover, .footer-grid > div:hover, .footer a:hover { transform:none; translate:none; } }
 				@media (max-width:800px) { .landing-nav { height:78px; gap:12px; padding:0 18px; } .landing-logo { width:158px; height:60px; } .landing-links { display:none; } .portal-button { padding:11px 16px; font-size:13px; } .hero-inner { padding:48px 22px 55px; } .hero-layout { grid-template-columns:1fr; gap:34px; } .hero h1 { font-size:52px; } .hero-visual { min-height:300px; } .hero-visual img { min-height:300px; } .plans, .diagnostic-grid, .portal-cards, .footer-grid { grid-template-columns:1fr; } .plan.featured { transform:none; } .diagnostic-grid { gap:35px; } .diagnostic-copy .section-title { font-size:38px; } .portal-banner { margin:35px 0 0; padding:30px 24px; flex-direction:column; align-items:flex-start; } .footer-bottom { flex-direction:column; } }
@@ -539,18 +541,34 @@ function Home() {
 				.landing-nav .theme-toggle { border-radius:var(--star-border-radius, 8px); }
 				@media (max-width:800px) { .landing-nav { gap:8px; padding:0 12px; } .landing-logo { width:clamp(108px, 33vw, 150px); height:58px; } .portal-button { padding:10px 11px; font-size:12px; } }
 				@media (max-width:380px) { .landing-nav { gap:6px; padding:0 10px; } .landing-logo { width:clamp(92px, 28vw, 108px); } .portal-button { padding:9px 8px; font-size:11px; } }
+				.landing-bottom-nav { display:none; }
+				@media (max-width:800px) {
+					.landing-bottom-nav { position:fixed; z-index:10; right:0; bottom:0; left:0; height:calc(68px + env(safe-area-inset-bottom)); display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); padding:7px 8px env(safe-area-inset-bottom); border-top:1px solid var(--gc-border); background:rgba(255,254,250,.96); box-shadow:0 -8px 26px #21160a12; backdrop-filter:blur(16px); }
+					.landing-bottom-nav a { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-width:0; border-radius:12px; color:var(--gc-muted); font-size:11px; font-weight:700; line-height:1; text-decoration:none; transition:color .2s ease, background-color .2s ease; }
+					.landing-bottom-nav a:hover, .landing-bottom-nav a:focus-visible { color:var(--orange); background:#ef74100d; outline:none; }
+					.landing-bottom-nav i { font-size:19px; line-height:1; }
+					.landing-page[data-theme="dark"] .landing-bottom-nav { border-top-color:var(--gc-border); background:rgba(37,41,44,.96); box-shadow:0 -8px 26px #00000030; }
+					.landing-page[data-theme="dark"] .landing-bottom-nav a { color:#ded8d2; }
+					.landing-page[data-theme="dark"] .landing-bottom-nav a:hover, .landing-page[data-theme="dark"] .landing-bottom-nav a:focus-visible { color:#ffb84d; background:#ef741018; }
+					.admin-access-desktop { display:none; }
+					.admin-access-mobile { display:inline-flex; left:12px; bottom:calc(78px + env(safe-area-inset-bottom)); z-index:11; width:44px; height:44px; padding:0; border-radius:50%; font-size:0; opacity:.72; transform:none; }
+					.admin-access-mobile i { font-size:17px; }
+					.admin-access-mobile:hover, .admin-access-mobile:focus-visible, .admin-access-mobile:active { opacity:1; transform:translateY(0); }
+					.whatsapp { bottom:calc(78px + env(safe-area-inset-bottom)); }
+					.footer { padding-bottom:calc(99px + env(safe-area-inset-bottom)); }
+				}
 				@media (prefers-reduced-motion: reduce) { .theme-toggle, .theme-toggle svg, .landing-nav, .hero, .section, .footer, .landing-links a, .hero h1, .hero p, .hero-stats strong, .hero-stats span, .section-title, .section-subtitle, .eyebrow, .plan, .plan h3, .plan li, .meter, .meter-label, .gauge-value, .meter-stats, .speed-status, .benefit, .benefit strong, .benefit span, .portal-card, .portal-card-title, .portal-card-copy, .footer p, .footer a, .footer h3 { transition:none; } }
 			`}</style>
 
 			<header className="landing-nav">
-				<img className="landing-logo" src={logo} alt="Global Conexit" />
+				<a href="#inicio" aria-label="Global Conexit - ir al inicio"><img className="landing-logo" src={logo} alt="Global Conexit" /></a>
 				<nav className="landing-links"><a href="#inicio">Inicio</a><a href="#planes">Planes</a><a href="#portal">Nosotros</a><a href="#soporte">Soporte</a></nav>
 				<StarBorder className="portal-button" type="button" onClick={() => setShowClientLogin(true)} theme={theme} color="#ef7410" trailColor="#ffb84d" duration={5} thickness={1.4} radius={9} glow={0.45}>♟&nbsp; Mi Portal / Ingresar</StarBorder>
 				<ThemeToggle theme={theme} onToggle={toggleTheme} />
 			</header>
 
 			<main>
-				<section className="hero" id="inicio"><GridScan className="hero-grid-scan" lightMode={theme === "light"} linesColor={theme === "light" ? "#b9a58f" : "#7c7370"} scanColor={theme === "light" ? "#d96b20" : "#ffb84d"} cells={7} depth={2.2} depthFade={0.8} shading={0.45} reflection={0.16} points={false} scanDirection="pingpong" scanDuration={4.8} scanDelay={2.5} scanWidth={0.75} trail={0.38} glow={0.3} autoScan interactive={false} clickEffect="none" /><div className="hero-inner"><div className="hero-layout"><div className="hero-copy">
+				<section className="hero"><GridScan className="hero-grid-scan" lightMode={theme === "light"} linesColor={theme === "light" ? "#b9a58f" : "#7c7370"} scanColor={theme === "light" ? "#d96b20" : "#ffb84d"} cells={7} depth={2.2} depthFade={0.8} shading={0.45} reflection={0.16} points={false} scanDirection="pingpong" scanDuration={4.8} scanDelay={2.5} scanWidth={0.75} trail={0.38} glow={0.3} autoScan interactive={false} clickEffect="none" /><div className="hero-inner"><div className="hero-layout"><div className="hero-copy">
 					<h1 ref={heroTitleRef}>
 						<VariableProximity label="Navega a la" className="hero-title-proximity" containerRef={heroTitleRef} radius={130} falloff="gaussian" smoothing={0.16} fromFontVariationSettings="'wght' 800, 'opsz' 48" toFontVariationSettings="'wght' 1000, 'opsz' 72" />
 						<br /><span className="accent"><VariableProximity label="velocidad" className="hero-title-proximity" containerRef={heroTitleRef} radius={130} falloff="gaussian" smoothing={0.16} fromFontVariationSettings="'wght' 800, 'opsz' 48" toFontVariationSettings="'wght' 1000, 'opsz' 72" /></span>
@@ -575,12 +593,19 @@ function Home() {
 			</main>
 
 			<footer className="footer" id="soporte"><div className="footer-grid"><div><img className="footer-logo" src={logo} alt="Global Conexit" /><p>Conectando vidas con fibra óptica de última generación. Velocidad, estabilidad y confianza en cada megabyte.</p></div><div><h3>Servicios</h3><a href="#planes">Planes de Internet</a><a href="#soporte">Internet Empresarial</a><a href="#soporte">Soporte Técnico</a></div><div><h3>Empresa</h3><a href="#portal">Quiénes somos</a><a href="#portal">Nuestro equipo</a><a href="#portal">Trabaja con nosotros</a><a href="#portal">Noticias</a></div><div><h3>Contacto</h3><p>☎ +57 305-915-7061<br />Atención 8:00 a.m - 5:00 p.m</p><p>✉ soporte@globalconexit.com<br />Soporte técnico</p><p>⌖ Cra. 15 #93-75, Argelia Ant</p></div></div><div className="footer-bottom"><span>© 2026 Global Conexit S.A.S. NIT 900.123.456-7. Todos los derechos reservados.</span><span>Política de privacidad - Términos de uso - Cookies</span></div></footer>
+			<nav className="landing-bottom-nav" aria-label="Navegación principal">
+				<a href="#inicio"><i className="bi bi-house-door-fill" aria-hidden="true" /><span>Inicio</span></a>
+				<a href="#planes"><i className="bi bi-wifi" aria-hidden="true" /><span>Planes</span></a>
+				<a href="#portal"><i className="bi bi-people-fill" aria-hidden="true" /><span>Nosotros</span></a>
+				<a href="#soporte"><i className="bi bi-headset" aria-hidden="true" /><span>Soporte</span></a>
+			</nav>
 			<StarBorder as="a" className="whatsapp" href="https://wa.me/573249476733" aria-label="Contactar por WhatsApp" target="_blank" rel="noreferrer" theme={theme} color="#eafff1" trailColor="#ffffff" duration={6} thickness={1.2} radius={12} glow={0.45}>
 				<svg viewBox="0 0 448 512" aria-hidden="true" focusable="false">
 					<path fill="currentColor" d="M380.9 97.1C339 55.1 283.2 32 223.9 32 101.5 32 1.9 131.5 1.9 254c0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.4 0 222-99.6 222-222 0-59.3-23.1-115.1-65-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.4-28.2-98.3 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.1 184.7-186.6 184.7zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18s-8.8-2.8-12.5 2.8-14.3 18-17.6 21.7-6.5 4.2-12 1.4c-32.7-16.3-54.1-29.1-75.5-65.9-5.7-9.8 5.7-9.1 16.3-30.4 1.8-3.7.9-6.9-.5-9.7s-12.5-30.1-17.1-41.2c-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2s-9.7 1.4-14.8 6.9c-5.1 5.6-19.4 19-19.4 46.3s19.9 53.7 22.6 57.4c2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4s-5.1-3.7-10.6-6.5z"/>
 				</svg>
 			</StarBorder>
-			<StarBorder as="a" className="admin-access" href="/admin" aria-label="Acceso administrativo" theme={theme} color="#ef7410" trailColor="#ffb84d" duration={6} thickness={1.2} radius={6} glow={0.4}>Acceso administrativo</StarBorder>
+			<StarBorder as="a" className="admin-access admin-access-desktop" href="/admin" aria-label="Acceso administrativo" title="Acceso administrativo" theme={theme} color="#ef7410" trailColor="#ffb84d" duration={6} thickness={1.2} radius={8} glow={0.4}><i className="bi bi-shield-lock-fill" aria-hidden="true" /><span>Acceso administrativo</span></StarBorder>
+			<StarBorder as="a" className="admin-access admin-access-mobile" href="/admin" aria-label="Acceso administrativo" title="Acceso administrativo" theme={theme} color="#ef7410" trailColor="#ffb84d" duration={6} thickness={1.2} radius={22} glow={0.4}><i className="bi bi-shield-lock-fill" aria-hidden="true" /><span className="visually-hidden">Acceso administrativo</span></StarBorder>
 		</div>
 	);
 }
