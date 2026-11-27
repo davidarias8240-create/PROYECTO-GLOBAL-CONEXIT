@@ -8,6 +8,8 @@ function PlanCheckout({ plan, onClose }) {
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState("");
 	const [successMessage, setSuccessMessage] = useState("");
+	const [emailSent, setEmailSent] = useState(false);
+	const [requestReference, setRequestReference] = useState("");
 	const [fieldErrors, setFieldErrors] = useState({});
 
 	const validateField = (name, value, documentType) => {
@@ -68,6 +70,8 @@ function PlanCheckout({ plan, onClose }) {
 			const result = await crearSolicitudPublica(newCustomer);
 			if (!result.success) throw new Error(result.message || "No fue posible registrar tus datos.");
 			setSuccessMessage("Solicitud Recibida correctamente");
+			setEmailSent(result.email_enviado === true);
+			setRequestReference(result.numero_solicitud || "");
 			setStep("confirmation");
 		} catch (submitError) {
 			setError(submitError.message || "No pudimos conectarnos. Intenta de nuevo en unos minutos.");
@@ -156,7 +160,11 @@ function PlanCheckout({ plan, onClose }) {
 					<div className="plan-checkout-body checkout-confirmation-step">
 						<div className="checkout-success-mark" aria-hidden="true">✓</div>
 						<h3>Solicitud recibida</h3>
-						<p>Tu solicitud ya fue enviada a nuestros representantes. En un plazo de hasta 5 días hábiles se pondrán en contacto contigo para continuar con el trámite de adquisición del servicio y ayudarte a elegir el plan que mejor se ajuste a tus necesidades.</p>
+						<p className={emailSent ? "" : "checkout-error"}>
+							{emailSent
+								? `Tu solicitud quedó registrada y enviamos una confirmación a tu correo. Nuestros representantes te contactarán en un plazo de hasta 5 días hábiles. Referencia: ${requestReference}.`
+								: `Tu solicitud quedó registrada, pero no pudimos enviar la confirmación por correo. No la envíes de nuevo para evitar duplicados. Referencia: ${requestReference}.`}
+						</p>
 						<div className="checkout-summary"><span>Plan solicitado</span><strong>{plan.name}</strong></div>
 					</div>
 				)}

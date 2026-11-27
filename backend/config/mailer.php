@@ -7,15 +7,30 @@ require_once dirname(__DIR__, 2) . "/vendor/autoload.php";
 function cargarConfiguracionMailer(): array
 {
     $configPath = __DIR__ . "/mail.local.php";
-    if (!is_file($configPath)) {
-        throw new RuntimeException(
-            "Falta backend/config/mail.local.php. Cópialo desde mail.local.php.example y configura el SMTP."
-        );
+    $config = [];
+    if (is_file($configPath)) {
+        $localConfig = require $configPath;
+        if (!is_array($localConfig)) {
+            throw new RuntimeException("La configuración SMTP debe devolver un arreglo.");
+        }
+        $config = $localConfig;
     }
 
-    $config = require $configPath;
-    if (!is_array($config)) {
-        throw new RuntimeException("La configuración SMTP debe devolver un arreglo.");
+    $environmentVariables = [
+        "host" => "SMTP_HOST",
+        "port" => "SMTP_PORT",
+        "username" => "SMTP_USERNAME",
+        "password" => "SMTP_PASSWORD",
+        "from_email" => "SMTP_FROM_EMAIL",
+        "from_name" => "SMTP_FROM_NAME",
+        "notification_email" => "SMTP_NOTIFICATION_EMAIL",
+        "encryption" => "SMTP_ENCRYPTION",
+    ];
+    foreach ($environmentVariables as $field => $variable) {
+        $value = getenv($variable);
+        if ($value !== false && $value !== "") {
+            $config[$field] = $value;
+        }
     }
 
     return $config;
@@ -60,7 +75,16 @@ function crearMailer(): PHPMailer
         $password = preg_replace('/\s+/', "", $password) ?? $password;
     }
     $mailer->Password = $password;
-    $mailer->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+    $encryption = strtolower(trim((string) ($config["encryption"] ?? "")));
+    if ($encryption === "") {
+        $encryption = $port === 465 ? "ssl" : "tls";
+    }
+    if (!in_array($encryption, ["tls", "ssl"], true)) {
+        throw new RuntimeException("La seguridad SMTP debe ser 'tls' o 'ssl'.");
+    }
+    $mailer->SMTPSecure = $encryption === "ssl"
+        ? PHPMailer::ENCRYPTION_SMTPS
+        : PHPMailer::ENCRYPTION_STARTTLS;
     $mailer->Port = $port;
     $mailer->CharSet = PHPMailer::CHARSET_UTF8;
     $mailer->setFrom(

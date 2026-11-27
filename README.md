@@ -20,7 +20,9 @@ En XAMPP, si Composer indica que falta ZIP, habilita `extension=zip` en `C:\xamp
 C:\xampp\php\php.exe -d extension=zip C:\ProgramData\ComposerSetup\bin\composer.phar install
 ```
 
-Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa el usuario y la contraseña de aplicación SMTP. El archivo local está excluido de Git; no lo agregues al repositorio. Para recibir las solicitudes en otro buzón, agrega `notification_email` a ese arreglo; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+Copia `backend\config\mail.local.php.example` como `backend\config\mail.local.php` y completa los datos SMTP del proveedor de correo. El archivo local está excluido de Git; no lo agregues al repositorio. También puedes definir `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `SMTP_NOTIFICATION_EMAIL` y `SMTP_ENCRYPTION` en el entorno del servidor; estas variables prevalecen sobre el archivo local. Usa `tls` con puerto 587 o `ssl` con puerto 465, según lo que indique tu proveedor. Para recibir las solicitudes en otro buzón, configura `notification_email` o `SMTP_NOTIFICATION_EMAIL`; si se omite, se usa el usuario SMTP. El solicitante también recibe una copia en el correo que registró. Para Gmail, usa una contraseña de aplicación con verificación en dos pasos, no la contraseña normal de la cuenta. El helper elimina los espacios de formato de las contraseñas de aplicación de Gmail.
+
+El endpoint guarda la solicitud y luego intenta enviar por separado el aviso interno y la confirmación al cliente. Un problema de correo se registra en el log de PHP y no cambia el resultado del registro; la respuesta indica si se envió el correo al cliente y muestra la referencia para evitar solicitudes duplicadas. Revisa el log del servidor para corregir cualquier error SMTP.
 
 Desde un endpoint PHP, carga `backend/config/mailer.php` y llama:
 

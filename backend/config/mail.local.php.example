@@ -1,0 +1,12 @@
+<?php
+
+return [
+    "host" => "smtp.example.com",
+    "port" => 587,
+    "encryption" => "tls",
+    "username" => "",
+    "password" => "",
+    "from_email" => "",
+    "from_name" => "Global Conexit",
+    "notification_email" => "",
+];
