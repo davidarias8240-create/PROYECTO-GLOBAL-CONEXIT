@@ -17,11 +17,14 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     exit;
 }
 
-if (!administradorAutenticado($pdo)) {
+$usuarioPanel = usuarioPanelAdministrativoAutenticado($pdo);
+if ($usuarioPanel === null || !permisoEntidadAdministrativa($usuarioPanel["rol"], "tickets")["leer"]) {
     http_response_code(401);
-    echo json_encode(["error" => "Inicia sesión como administrador"], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["error" => "No tienes permiso para consultar tickets"], JSON_UNESCAPED_UNICODE);
     exit;
 }
+$rolPanel = $usuarioPanel["rol"];
+$idUsuarioPanel = $usuarioPanel["id_usuario"];
 
 $idTicket = filter_input(INPUT_GET, "id_ticket", FILTER_VALIDATE_INT);
 if ($idTicket === false || $idTicket === null || $idTicket <= 0) {
@@ -31,11 +34,14 @@ if ($idTicket === false || $idTicket === null || $idTicket <= 0) {
 }
 
 try {
+    $roleScope = filtroAlcanceAdministrativo($rolPanel, "tickets");
+    $ticketScopeSql = $roleScope === null ? "" : " AND ({$roleScope})";
     $ticketStmt = $pdo->prepare(
         "SELECT t.*, c.nombres AS cliente_nombre, c.numero_cliente
          FROM ticket t
          INNER JOIN cliente c ON c.id_cliente = t.id_cliente
          WHERE t.id_ticket = :id_ticket
+           {$ticketScopeSql}
            AND NOT EXISTS (
                SELECT 1 FROM admin_bajas b
                WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
@@ -44,7 +50,10 @@ try {
            )
          LIMIT 1"
     );
-    $ticketStmt->execute([":id_ticket" => $idTicket]);
+    $ticketStmt->execute(array_merge(
+        [":id_ticket" => $idTicket],
+        parametrosAlcanceAdministrativo($rolPanel, "tickets", $idUsuarioPanel)
+    ));
     $ticket = $ticketStmt->fetch();
     if (!$ticket) {
         http_response_code(404);

@@ -1,15 +1,16 @@
 <?php
 require_once __DIR__ . "/database.php";
 require_once __DIR__ . "/session.php";
+require_once __DIR__ . "/admin_permissions.php";
 
-function administradorAutenticado(PDO $pdo): bool
+function usuarioPanelAdministrativoAutenticado(PDO $pdo): ?array
 {
     if (empty($_SESSION["id_usuario"]) || ($_SESSION["tipo_sesion"] ?? "") !== "ADMINISTRADOR") {
-        return false;
+        return null;
     }
 
     $stmt = $pdo->prepare(
-        "SELECT u.estado, r.nombre AS rol
+        "SELECT u.id_usuario, u.estado, r.nombre AS rol
          FROM usuario u
          INNER JOIN rol r ON r.id_rol = u.id_rol
          WHERE u.id_usuario = :id_usuario
@@ -31,11 +32,22 @@ function administradorAutenticado(PDO $pdo): bool
     $stmt->execute([":id_usuario" => $_SESSION["id_usuario"]]);
     $usuario = $stmt->fetch();
 
-    if (!$usuario || $usuario["estado"] !== "ACTIVO" || $usuario["rol"] !== "ADMINISTRADOR") {
+    if (!$usuario
+        || $usuario["estado"] !== "ACTIVO"
+        || !in_array($usuario["rol"], rolesPanelAdministrativo(), true)) {
         $_SESSION = [];
         session_destroy();
-        return false;
+        return null;
     }
 
-    return true;
+    return [
+        "id_usuario" => (int) $usuario["id_usuario"],
+        "rol" => $usuario["rol"],
+    ];
+}
+
+function administradorAutenticado(PDO $pdo): bool
+{
+    $usuario = usuarioPanelAdministrativoAutenticado($pdo);
+    return $usuario !== null && $usuario["rol"] === "ADMINISTRADOR";
 }

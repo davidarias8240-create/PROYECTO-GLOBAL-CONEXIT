@@ -6,9 +6,33 @@ import ToastMessage from "../components/ToastMessage";
 import useTheme from "../hooks/useTheme";
 import { verificarSesionAdmin } from "../services/api";
 
+function moduloDeRuta(pathname) {
+    const partes = pathname.split("/").filter(Boolean);
+    if (partes[0] === "clientes" && /^\d+$/.test(partes[1] || "")) {
+        return partes[2] || "clientes";
+    }
+    return partes[0] || "";
+}
+
+function rutaPermitida(pathname, permisos) {
+    const modulo = moduloDeRuta(pathname);
+    if (modulo === "dashboard") return permisos.dashboard;
+    if (modulo === "desactivados") return permisos.desactivados;
+    return Boolean(permisos.entidades[modulo]?.leer);
+}
+
+function rutaInicial(permisos) {
+    if (permisos.dashboard) return "/dashboard";
+    if (permisos.rol === "TECNICO" && permisos.entidades.ordenes?.leer) return "/ordenes";
+    return Object.entries(permisos.entidades).find(([, policy]) => policy.leer)?.[0]
+        ? `/${Object.entries(permisos.entidades).find(([, policy]) => policy.leer)[0]}`
+        : "/admin";
+}
+
 function DashboardLayout({ children }) {
     const navigate = useNavigate();
     const location = useLocation();
+    const [permisos, setPermisos] = useState(null);
     const [authorized, setAuthorized] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [theme, toggleTheme] = useTheme();
@@ -19,9 +43,18 @@ function DashboardLayout({ children }) {
 
     useEffect(() => {
         verificarSesionAdmin()
-            .then(() => setAuthorized(true))
+            .then((response) => setPermisos(response.permisos))
             .catch(() => navigate("/admin", { replace: true }));
     }, [navigate]);
+
+    const authorized = Boolean(permisos);
+    const allowed = authorized && rutaPermitida(location.pathname, permisos);
+
+    useEffect(() => {
+        if (authorized && !allowed) {
+            navigate(rutaInicial(permisos), { replace: true });
+        }
+    }, [authorized, allowed, navigate, permisos]);
 
     useEffect(() => {
         if (!isSidebarOpen) return undefined;
@@ -47,9 +80,16 @@ function DashboardLayout({ children }) {
         return <p className="p-4" role="status">Validando sesión administrativa...</p>;
     }
 
+    if (!allowed) {
+        return <main className="p-4"><section className="alert alert-warning" role="alert">
+            No tienes permiso para acceder a este módulo.
+        </section></main>;
+    }
+
     return (
         <div className="admin-shell d-flex" data-theme={theme}>
             <ToastMessage message={welcomeMessage} onClose={dismissWelcome} />
+            <Sidebar permisos={permisos} />
             <button
                 className={`sidebar-backdrop${isSidebarOpen ? " is-visible" : ""}`}
                 type="button"

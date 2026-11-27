@@ -28,11 +28,14 @@ if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
     exit;
 }
 
-if (!administradorAutenticado($pdo)) {
+$usuarioPanel = usuarioPanelAdministrativoAutenticado($pdo);
+if ($usuarioPanel === null) {
     http_response_code(401);
-    echo json_encode(["error" => "Inicia sesión como administrador"], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["error" => "Inicia sesión en el panel administrativo"], JSON_UNESCAPED_UNICODE);
     exit;
 }
+$rolPanel = $usuarioPanel["rol"];
+$idUsuarioPanel = $usuarioPanel["id_usuario"];
 
 $configuracion = require __DIR__ . "/entidades_config.php";
 $entidad = $_GET["entidad"] ?? "";
@@ -47,6 +50,10 @@ if (!isset($configuracion[$entidad])) {
 $definicion = $configuracion[$entidad];
 $tabla = $definicion["tabla"];
 $clave = $definicion["clave"];
+$permisosEntidad = permisoEntidadAdministrativa($rolPanel, $entidad);
+if (!$permisosEntidad["leer"]) {
+    responder(["error" => "No tienes permiso para consultar este módulo"], 403);
+}
 $baseDatos = (string) $pdo->query("SELECT DATABASE()")->fetchColumn();
 $metadatos = [];
 $idClienteContexto = null;
@@ -63,6 +70,19 @@ if (array_key_exists("id_cliente", $_GET)) {
     $clienteExiste->execute([":id_cliente" => $idClienteContexto]);
     if (!$clienteExiste->fetchColumn()) {
         responder(["error" => "No se encontró el cliente solicitado"], 404);
+    }
+    $scopeCliente = filtroAlcanceAdministrativo($rolPanel, "clientes");
+    if ($scopeCliente !== null) {
+        $clienteVisible = $pdo->prepare(
+            "SELECT 1 FROM cliente t WHERE t.id_cliente = :id_cliente AND ({$scopeCliente}) LIMIT 1"
+        );
+        $clienteVisible->execute(array_merge(
+            [":id_cliente" => $idClienteContexto],
+            parametrosAlcanceAdministrativo($rolPanel, "clientes", $idUsuarioPanel)
+        ));
+        if (!$clienteVisible->fetchColumn()) {
+            responder(["error" => "No tienes permiso para consultar los datos de este cliente"], 404);
+        }
     }
 }
 
@@ -585,9 +605,15 @@ function obtenerOpcionesRelacion(
     string $tabla,
     string $columnaClave,
     ?string $entidadContexto = null,
-    ?int $idClienteContexto = null
+    ?int $idClienteContexto = null,
+    string $rolPanel = "ADMINISTRADOR",
+    int $idUsuarioPanel = 0
 ): array
 {
+    if ($tabla === "usuario" && $rolPanel !== "ADMINISTRADOR") {
+        return [];
+    }
+
     $labelCandidates = match ($tabla) {
         "usuario" => ["correo"],
         "cliente" => ["nombres", "numero_cliente"],
@@ -604,10 +630,11 @@ function obtenerOpcionesRelacion(
     $keySql = "`" . str_replace("`", "``", $columnaClave) . "`";
     if ($tabla === "contrato") {
         // Para elegir una factura, se identifica el contrato por el cliente y el plan, no por su ID interno.
+        $planPrice = $rolPanel === "TECNICO" ? "" : "plan.precio AS plan_precio,";
         $candidateSql = "contrato.id_contrato AS id, contrato.id_cliente AS cliente_id,
             contrato.id_direccion AS direccion_id, cliente.nombres AS cliente_nombre,
             cliente.numero_cliente AS cliente_numero, plan.nombre AS plan_nombre,
-            plan.precio AS plan_precio, cliente.tipo_documento, cliente.numero_documento,
+            {$planPrice} cliente.tipo_documento, cliente.numero_documento,
             cliente.telefono, cliente.correo, direccion.direccion AS direccion_texto,
             contrato.fecha_inicio";
         $fromSql = "contrato
@@ -651,6 +678,90 @@ function obtenerOpcionesRelacion(
     }
     if ($tabla === "plan") {
         $filters[] = "plan.estado = 'ACTIVO'";
+    }
+    if ($rolPanel === "TECNICO") {
+        if ($tabla === "cliente") {
+            $filters[] = "(
+                EXISTS (
+                    SELECT 1 FROM ticket ts
+                    WHERE ts.id_cliente = cliente.id_cliente
+                      AND ts.id_usuario_responsable = :scope_ticket_user
+                      AND NOT EXISTS (
+                          SELECT 1 FROM admin_bajas bx
+                          WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                            AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                                CAST(ts.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+                      )
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM orden_servicio os
+                    INNER JOIN contrato cos ON cos.id_contrato = os.id_contrato
+                    WHERE cos.id_cliente = cliente.id_cliente
+                      AND os.id_usuario_tecnico = :scope_order_user
+                      AND NOT EXISTS (
+                          SELECT 1 FROM admin_bajas bx
+                          WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'ordenes' COLLATE utf8mb4_unicode_ci
+                            AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                                CAST(os.id_orden AS CHAR) COLLATE utf8mb4_unicode_ci
+                      )
+                      AND NOT EXISTS (
+                          SELECT 1 FROM admin_bajas bx
+                          WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'contratos' COLLATE utf8mb4_unicode_ci
+                            AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                                CAST(cos.id_contrato AS CHAR) COLLATE utf8mb4_unicode_ci
+                      )
+                )
+            )";
+            $params[":scope_ticket_user"] = $idUsuarioPanel;
+            $params[":scope_order_user"] = $idUsuarioPanel;
+        } elseif ($tabla === "direccion") {
+            $filters[] = "(
+                EXISTS (
+                    SELECT 1 FROM ticket ts
+                    WHERE ts.id_cliente = direccion.id_cliente
+                      AND ts.id_usuario_responsable = :scope_ticket_user
+                      AND NOT EXISTS (
+                          SELECT 1 FROM admin_bajas bx
+                          WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                            AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                                CAST(ts.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+                      )
+                )
+                OR EXISTS (
+                    SELECT 1 FROM orden_servicio os
+                    WHERE os.id_direccion = direccion.id_direccion
+                      AND os.id_usuario_tecnico = :scope_order_user
+                      AND NOT EXISTS (
+                          SELECT 1 FROM admin_bajas bx
+                          WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'ordenes' COLLATE utf8mb4_unicode_ci
+                            AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                                CAST(os.id_orden AS CHAR) COLLATE utf8mb4_unicode_ci
+                      )
+                )
+            )";
+            $params[":scope_ticket_user"] = $idUsuarioPanel;
+            $params[":scope_order_user"] = $idUsuarioPanel;
+        } elseif ($tabla === "contrato") {
+            $filters[] = "EXISTS (
+                SELECT 1 FROM orden_servicio os
+                WHERE os.id_contrato = contrato.id_contrato
+                  AND os.id_usuario_tecnico = :scope_order_user
+                  AND NOT EXISTS (
+                      SELECT 1 FROM admin_bajas bx
+                      WHERE bx.entidad COLLATE utf8mb4_unicode_ci = 'ordenes' COLLATE utf8mb4_unicode_ci
+                        AND bx.id_registro COLLATE utf8mb4_unicode_ci =
+                            CAST(os.id_orden AS CHAR) COLLATE utf8mb4_unicode_ci
+                  )
+            )";
+            $params[":scope_order_user"] = $idUsuarioPanel;
+        } elseif ($tabla === "ticket") {
+            $filters[] = "ticket.id_usuario_responsable = :scope_ticket_user";
+            $params[":scope_ticket_user"] = $idUsuarioPanel;
+        }
+    } elseif ($rolPanel === "ASESOR_COMERCIAL" && $tabla === "ticket") {
+        $filters[] = "(ticket.id_usuario_responsable = :scope_ticket_user OR ticket.id_usuario_responsable IS NULL)";
+        $params[":scope_ticket_user"] = $idUsuarioPanel;
     }
     foreach ($configuracion as $entity => $definition) {
         if ($definition["tabla"] === $tabla && $definition["archivable"]) {
@@ -706,7 +817,6 @@ function obtenerOpcionesRelacion(
                 "correo" => $row["correo"],
                 "direccion" => $row["direccion_texto"],
                 "plan_nombre" => $row["plan_nombre"],
-                "plan_precio" => $row["plan_precio"],
             ],
             "factura" => [
                 "cliente_nombre" => $row["cliente_nombre"],
@@ -723,6 +833,9 @@ function obtenerOpcionesRelacion(
             ],
             default => [],
         };
+        if ($tabla === "contrato" && $rolPanel !== "TECNICO") {
+            $details["plan_precio"] = $row["plan_precio"] ?? null;
+        }
         $options[] = [
             "value" => $row["id"],
             "label" => implode(" · ", $labels),
@@ -786,6 +899,19 @@ function transicionTicketPermitida(string $anterior, string $nuevo): bool
     return in_array($nuevo, $transiciones[$anterior] ?? [], true);
 }
 
+function transicionOrdenPermitida(string $anterior, string $nuevo): bool
+{
+    $transiciones = [
+        "PENDIENTE" => ["PROGRAMADA", "CANCELADA"],
+        "PROGRAMADA" => ["EN_PROCESO", "REPROGRAMADA", "CANCELADA"],
+        "EN_PROCESO" => ["CERRADA", "REPROGRAMADA"],
+        "REPROGRAMADA" => ["PROGRAMADA", "EN_PROCESO", "CANCELADA"],
+        "CERRADA" => [],
+        "CANCELADA" => [],
+    ];
+    return in_array($nuevo, $transiciones[$anterior] ?? [], true);
+}
+
 function mensajeNotificacionTicket(string $estado): string
 {
     return match ($estado) {
@@ -803,6 +929,8 @@ try {
 
     if ($method === "GET" && $operacion === "meta") {
         foreach ($metadata["columns"] as &$column) {
+            $column["creatable"] = campoCreableAdministrativo($rolPanel, $entidad, $column["name"]);
+            $column["editable"] = campoEditableAdministrativo($rolPanel, $entidad, $column["name"]);
             if ($column["relation"] !== null) {
                 $relation = $column["relation"];
                 $column["options"] = obtenerOpcionesRelacion(
@@ -811,7 +939,9 @@ try {
                     $relation["table"],
                     $relation["column"],
                     $entidad,
-                    $idClienteContexto
+                    $idClienteContexto,
+                    $rolPanel,
+                    $idUsuarioPanel
                 );
             } else {
                 $column["options"] = [];
@@ -822,14 +952,18 @@ try {
             "entidad" => $entidad,
             "titulo" => $definicion["titulo"],
             "clave" => $clave,
-            "soloLectura" => !$definicion["editable"],
-            "archivable" => $definicion["archivable"],
+            "soloLectura" => !$permisosEntidad["crear"] && !$permisosEntidad["editar"],
+            "archivable" => $definicion["archivable"] && $permisosEntidad["archivar"],
+            "permisos" => $permisosEntidad,
             "columnas" => $metadata["columns"]
         ]);
     }
 
     if ($method === "GET" && $operacion === "listar") {
         $archivados = ($_GET["archivados"] ?? "0") === "1";
+        if ($archivados && !$permisosEntidad["archivar"]) {
+            responder(["error" => "No tienes permiso para consultar registros desactivados"], 403);
+        }
         $columns = array_column($metadata["columns"], "name");
         $select = implode(", ", array_map(
             static fn(string $name): string => "t.`" . str_replace("`", "``", $name) . "`",
@@ -858,6 +992,8 @@ try {
         $customerFilter = $idClienteContexto === null
             ? ""
             : " AND (" . filtroClienteEntidad($entidad) . ")";
+        $roleScope = filtroAlcanceAdministrativo($rolPanel, $entidad);
+        $roleFilter = $roleScope === null ? "" : " AND ({$roleScope})";
         $searchFilter = "";
         $searchValue = $_GET["buscar"] ?? "";
         if (!is_string($searchValue)) {
@@ -871,6 +1007,7 @@ try {
         if ($idClienteContexto !== null) {
             $params = array_merge($params, parametrosFiltroCliente($entidad, $idClienteContexto));
         }
+        $params = array_merge($params, parametrosAlcanceAdministrativo($rolPanel, $entidad, $idUsuarioPanel));
         if ($entidad === "clientes" && $search !== "") {
             $searchFilter = " AND (
                 CAST(t.id_cliente AS CHAR) LIKE :buscar_id
@@ -893,7 +1030,7 @@ try {
             }
         }
         $listLimit = $idClienteContexto === null ? " LIMIT 1000" : "";
-        $sql .= " WHERE {$archiveFilter}{$customerFilter}{$searchFilter} ORDER BY {$keySql} ASC{$listLimit}";
+        $sql .= " WHERE {$archiveFilter}{$customerFilter}{$roleFilter}{$searchFilter} ORDER BY {$keySql} ASC{$listLimit}";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         responder(["registros" => $stmt->fetchAll()]);
@@ -901,6 +1038,17 @@ try {
 
     $data = json_decode(file_get_contents("php://input"), true);
     $id = is_array($data) && isset($data["id"]) ? trim((string) $data["id"]) : "";
+    if ($method === "POST") {
+        $action = match ($operacion) {
+            "crear" => "crear",
+            "editar" => "editar",
+            "eliminar", "reactivar" => "archivar",
+            default => null,
+        };
+        if ($action !== null && !$permisosEntidad[$action]) {
+            responder(["error" => "No tienes permiso para realizar esta acción"], 403);
+        }
+    }
     $idempotenciaPago = null;
     if ($method === "POST" && $operacion === "crear" && $tabla === "pago") {
         $idempotenciaPago = is_array($data) && is_string($data["idempotencia_key"] ?? null)
@@ -946,6 +1094,9 @@ try {
         $columns = array_column($metadata["columns"], null, "name");
         $values = [];
         foreach ($input as $field => $value) {
+            if (!campoCreableAdministrativo($rolPanel, $entidad, (string) $field)) {
+                responder(["error" => "No tienes permiso para definir el campo " . $field], 403);
+            }
             if ($tabla === "ticket" && in_array($field, ["estado", "fecha_cierre"], true)) {
                 responder(["error" => "El estado y la fecha de cierre del ticket se gestionan desde su seguimiento"], 400);
             }
@@ -982,6 +1133,9 @@ try {
                         && !$columns[$field]["generated"]
                 );
             }
+        }
+        if ($tabla === "ticket" && $rolPanel === "ASESOR_COMERCIAL") {
+            $values["id_usuario_responsable"] = $idUsuarioPanel;
         }
         foreach ($metadata["columns"] as $column) {
             if ($column["name"] === $clave || $column["name"] === "contrasena_hash") {
@@ -1254,6 +1408,13 @@ try {
             if ($tabla === "ticket" && $field === "fecha_cierre") {
                 responder(["error" => "La fecha de cierre del ticket se actualiza automáticamente"], 400);
             }
+            $campoGestionTicket = $tabla === "ticket"
+                && $field === "estado"
+                && $gestionTicket
+                && ($permisosEntidad["gestion_ticket"] ?? false);
+            if (!$campoGestionTicket && !campoEditableAdministrativo($rolPanel, $entidad, (string) $field)) {
+                responder(["error" => "No tienes permiso para modificar el campo " . $field], 403);
+            }
             $fechaPagoEditable = $tabla === "pago" && $field === "fecha";
             if ($field === $clave || !isset($columns[$field])
                 || ($columns[$field]["generated"] && !$fechaPagoEditable)) {
@@ -1282,8 +1443,10 @@ try {
         $customerFilter = $idClienteContexto === null
             ? ""
             : " AND (" . filtroClienteEntidad($entidad) . ")";
+        $roleScope = filtroAlcanceAdministrativo($rolPanel, $entidad);
+        $roleFilter = $roleScope === null ? "" : " AND ({$roleScope})";
         $exists = $pdo->prepare(
-            "SELECT 1 FROM `{$tabla}` t WHERE t.`{$clave}` = :id{$customerFilter}
+            "SELECT 1 FROM `{$tabla}` t WHERE t.`{$clave}` = :id{$customerFilter}{$roleFilter}
              AND NOT EXISTS (
                  SELECT 1 FROM admin_bajas b
                  WHERE b.entidad COLLATE utf8mb4_unicode_ci = :entity COLLATE utf8mb4_unicode_ci
@@ -1295,6 +1458,7 @@ try {
         if ($idClienteContexto !== null) {
             $existsParams = array_merge($existsParams, parametrosFiltroCliente($entidad, $idClienteContexto));
         }
+        $existsParams = array_merge($existsParams, parametrosAlcanceAdministrativo($rolPanel, $entidad, $idUsuarioPanel));
         $exists->execute($existsParams);
         if (!$exists->fetchColumn()) {
             responder(["error" => "No se encontró el registro activo"], 404);
@@ -1331,10 +1495,15 @@ try {
         $pdo->beginTransaction();
         $paymentInvoiceIds = [];
         if (in_array($tabla, ["plan", "contrato", "periodo_facturacion", "factura", "orden_servicio", "pago", "ticket"], true)) {
+            $currentScope = filtroAlcanceAdministrativo($rolPanel, $entidad);
+            $currentRoleFilter = $currentScope === null ? "" : " AND ({$currentScope})";
             $currentStmt = $pdo->prepare(
-                "SELECT * FROM `{$tabla}` WHERE `{$clave}` = :record_id FOR UPDATE"
+                "SELECT * FROM `{$tabla}` t WHERE t.`{$clave}` = :record_id{$currentRoleFilter} FOR UPDATE"
             );
-            $currentStmt->execute([":record_id" => $id]);
+            $currentStmt->execute(array_merge(
+                [":record_id" => $id],
+                parametrosAlcanceAdministrativo($rolPanel, $entidad, $idUsuarioPanel)
+            ));
             $currentRecord = $currentStmt->fetch();
             if (!$currentRecord) {
                 $pdo->rollBack();
@@ -1432,6 +1601,35 @@ try {
                     responder(["error" => "Cambia el estado o agrega una observación de gestión"], 400);
                 }
             }
+            if ($tabla === "orden_servicio" && $rolPanel === "TECNICO") {
+                $estadoAnteriorOrden = (string) $currentRecord["estado"];
+                $estadoNuevoOrden = (string) ($effectiveValues["estado"] ?? $estadoAnteriorOrden);
+                if ($estadoAnteriorOrden === $estadoNuevoOrden
+                    && in_array($estadoAnteriorOrden, ["CERRADA", "CANCELADA"], true)) {
+                    $pdo->rollBack();
+                    responder(["error" => "No se puede modificar una orden cerrada o cancelada"], 409);
+                }
+                if ($estadoAnteriorOrden !== $estadoNuevoOrden) {
+                    if (!transicionOrdenPermitida($estadoAnteriorOrden, $estadoNuevoOrden)) {
+                        $pdo->rollBack();
+                        responder(["error" => "La transición de estado de la orden no está permitida"], 409);
+                    }
+                    if ($estadoNuevoOrden === "PROGRAMADA" && empty($currentRecord["fecha_programada"])) {
+                        $pdo->rollBack();
+                        responder(["error" => "La orden debe tener una fecha programada antes de asignar ese estado"], 409);
+                    }
+                    if ($estadoNuevoOrden === "REPROGRAMADA"
+                        && trim((string) ($effectiveValues["motivo_reprogramacion"] ?? "")) === "") {
+                        $pdo->rollBack();
+                        responder(["error" => "Indica el motivo de la reprogramación"], 400);
+                    }
+                    if ($estadoNuevoOrden === "CERRADA"
+                        && trim((string) ($effectiveValues["resultado"] ?? "")) === "") {
+                        $pdo->rollBack();
+                        responder(["error" => "Registra el resultado antes de cerrar la orden"], 400);
+                    }
+                }
+            }
         }
         if ($tabla === "cliente" && array_key_exists("correo", $values)) {
             // El correo también es el usuario de inicio de sesión del cliente vinculado.
@@ -1453,6 +1651,14 @@ try {
             }
         }
         $stmt->execute($updateValues);
+        if ($tabla === "orden_servicio" && $rolPanel === "TECNICO"
+            && isset($estadoNuevoOrden) && $estadoNuevoOrden !== $estadoAnteriorOrden) {
+            $fechaCierreSql = $estadoNuevoOrden === "CERRADA" ? "CURRENT_TIMESTAMP" : "NULL";
+            $cierreOrdenStmt = $pdo->prepare(
+                "UPDATE orden_servicio SET fecha_cierre = {$fechaCierreSql} WHERE id_orden = :id_orden"
+            );
+            $cierreOrdenStmt->execute([":id_orden" => $id]);
+        }
         if ($tabla === "ticket" && $gestionTicket) {
             $cambioEstadoTicket = $estadoAnteriorTicket !== $estadoNuevoTicket;
             if ($cambioEstadoTicket) {

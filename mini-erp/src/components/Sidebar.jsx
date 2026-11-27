@@ -75,6 +75,7 @@ function SidebarIcon({ name, className = "" }) {
     );
 }
 
+function Sidebar({ permisos }) {
 function Sidebar({ isOpen, onNavigate }) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
@@ -85,12 +86,14 @@ function Sidebar({ isOpen, onNavigate }) {
             icon,
             entities: keys
                 .map((key) => adminEntities.find((entity) => entity.key === key))
-                .filter(Boolean),
+                .filter((entity) => entity && permisos.entidades[entity.key]?.leer),
         })),
         {
             label: "Otros",
             icon: "archive",
-            entities: adminEntities.filter(({ key }) => !groupedKeys.has(key)),
+            entities: adminEntities.filter(({ key }) =>
+                !groupedKeys.has(key) && permisos.entidades[key]?.leer
+            ),
         },
     ].filter(({ entities }) => entities.length > 0);
     const activeGroup = groups.find(({ entities }) =>
@@ -117,6 +120,12 @@ function Sidebar({ isOpen, onNavigate }) {
             </div>
 
             <nav className="sidebar-navigation" aria-label="Navegación administrativa">
+                {permisos.dashboard && (
+                    <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard">
+                        <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
+                        <span>Dashboard</span>
+                    </NavLink>
+                )}
                 <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard" onClick={onNavigate}>
                     <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
                     <span>Dashboard</span>
@@ -154,6 +163,16 @@ function Sidebar({ isOpen, onNavigate }) {
                     </section>
                 ))}
                 <section className="sidebar-group">
+                    {permisos.desactivados && (
+                        <ul className="nav nav-pills flex-column sidebar-subcategories">
+                            <li className="nav-item">
+                                <NavLink className="nav-link" to="/desactivados">
+                                    <SidebarIcon name="history" className="sidebar-subcategory-icon" />
+                                    <span>Desactivados</span>
+                                </NavLink>
+                            </li>
+                        </ul>
+                    )}
                     <ul className="nav nav-pills flex-column sidebar-subcategories">
                         <li className="nav-item">
                             <NavLink className="nav-link" to="/desactivados" onClick={onNavigate}>
