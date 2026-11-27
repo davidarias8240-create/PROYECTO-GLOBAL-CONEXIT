@@ -23,6 +23,13 @@ const customerFields = [
   { name: "telefono", label: "Teléfono", maxLength: 30 },
 ];
 
+const addressFields = [
+  { name: "direccion", label: "Dirección", required: true, maxLength: 255 },
+  { name: "ciudad", label: "Ciudad", required: true, maxLength: 100 },
+  { name: "departamento", label: "Departamento", required: true, maxLength: 100 },
+  { name: "referencia", label: "Referencia o punto cercano", required: false, maxLength: 255 },
+];
+
 function customerFieldColumn(field) {
   const maxLength = field.name === "nombres" ? 120 : field.maxLength || 30;
   return {
@@ -578,6 +585,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [values, setValues] = useState({});
   const [fieldErrors, setFieldErrors] = useState({});
   const [customer, setCustomer] = useState({});
+  const [address, setAddress] = useState({});
   const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -749,6 +757,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     paymentIdempotencyKey.current = null;
     setValues({});
     setCustomer({});
+    setAddress({});
     setPassword("");
   };
 
@@ -860,6 +869,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setValues(initialValues);
     setFieldErrors({});
     setCustomer({});
+    setAddress({});
     setPassword("");
     setEditingId(null);
     setShowForm(true);
@@ -913,8 +923,57 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
             next[relatedColumn.name] = "";
           }
         }
+        const client = column.options?.find((option) => String(option.value) === String(value));
+        const details = client?.details || {};
+        const clientMappings = {
+          tipo_documento: "tipo_documento",
+          numero_documento: "numero_documento",
+          nombres: "nombres",
+          nombre_contacto: "nombres",
+          telefono: "telefono",
+          telefono_contacto: "telefono",
+          correo: "correo",
+          numero_cliente: "numero_cliente",
+        };
+        for (const [fieldName, detailName] of Object.entries(clientMappings)) {
+          if (Object.hasOwn(next, fieldName) && details[detailName]) {
+            next[fieldName] = details[detailName];
+          }
+        }
+        if (details.direccion || details.ciudad || details.departamento || details.referencia) {
+          setAddress((currentAddress) => ({
+            ...currentAddress,
+            direccion: details.direccion || currentAddress.direccion || "",
+            ciudad: details.ciudad || currentAddress.ciudad || "",
+            departamento: details.departamento || currentAddress.departamento || "",
+            referencia: details.referencia || currentAddress.referencia || "",
+          }));
+        }
+        if (Object.hasOwn(next, "id_direccion")) {
+          const addressColumn = formColumns.find((item) => item.name === "id_direccion");
+          const firstAddress = addressColumn?.options?.find((option) =>
+            String(option.details?.cliente_id) === String(value)
+          );
+          if (firstAddress) {
+            next.id_direccion = String(firstAddress.value);
+            const addressDetails = firstAddress.details || {};
+            for (const fieldName of ["direccion", "ciudad", "departamento", "referencia"]) {
+              if (Object.hasOwn(next, fieldName) && addressDetails[fieldName]) {
+                next[fieldName] = addressDetails[fieldName];
+              }
+            }
+            setAddress((currentAddress) => ({
+              ...currentAddress,
+              direccion: addressDetails.direccion || currentAddress.direccion || "",
+              ciudad: addressDetails.ciudad || currentAddress.ciudad || "",
+              departamento: addressDetails.departamento || currentAddress.departamento || "",
+              referencia: addressDetails.referencia || currentAddress.referencia || "",
+            }));
+          } else {
+            next.id_direccion = "";
+          }
+        }
         if (entity === "solicitudes") {
-          const client = column.options?.find((option) => String(option.value) === String(value));
           next.nombre_contacto = client?.details?.nombres || "";
           next.correo = client?.details?.correo || "";
           next.telefono = client?.details?.telefono || "";
@@ -1017,6 +1076,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       fieldValue(column, row[column.name]),
     ])));
     setFieldErrors({});
+    setAddress({});
     setPassword("");
     setShowForm(true);
   };
@@ -1026,6 +1086,13 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     if (savingRef.current) return;
     const activeFormColumns = editingId ? editFormColumns : createFormColumns;
     const errors = validateFieldSet(activeFormColumns, values, entity);
+    if ((entity === "clientes" && !editingId) || (entity === "usuarios" && !editingId && isClientRole)) {
+      for (const field of addressFields) {
+        if (field.required && !address[field.name]?.trim()) {
+          errors[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
+        }
+      }
+    }
     if (entity === "usuarios" && !editingId && isClientRole) {
       if (!["CC", "CE", "NIT", "TI", "PASAPORTE", "OTRO"].includes(customer.tipo_documento)) {
         errors["cliente.tipo_documento"] = "Selecciona un tipo de documento válido.";
@@ -1057,6 +1124,9 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
     try {
       const payload = { datos };
+      if (entity === "clientes" && !editingId) {
+        payload.direccion = address;
+      }
       if (entity === "pagos" && !editingId) {
         payload.idempotencia_key = paymentIdempotencyKey.current;
       }
@@ -1073,7 +1143,13 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
               throw new Error(`Completa el campo ${field.label} del perfil cliente.`);
             }
           }
+          for (const field of addressFields) {
+            if (field.required && !address[field.name]?.trim()) {
+              throw new Error(`Completa el campo ${field.label} de la dirección.`);
+            }
+          }
           payload.cliente = customer;
+          payload.direccion = address;
         }
       }
 
@@ -1613,6 +1689,44 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
               </label>
             )}
           </div>
+          {entity === "clientes" && !editingId && (
+            <>
+              <h4 className="h6 mt-4">Dirección del cliente</h4>
+              <div className="admin-entity-fields">
+                {addressFields.map((field) => (
+                  <label className="admin-entity-field" key={field.name}>
+                    <span>{field.label}{field.required ? " *" : ""}</span>
+                    <input
+                      className={`form-control${fieldErrors[`direccion.${field.name}`] ? " is-invalid" : ""}`}
+                      type="text"
+                      value={address[field.name] || ""}
+                      maxLength={field.maxLength}
+                      required={field.required}
+                      aria-invalid={Boolean(fieldErrors[`direccion.${field.name}`])}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setAddress((current) => ({ ...current, [field.name]: value }));
+                        setFieldErrors((current) => {
+                          const next = { ...current };
+                          if (field.required && !value.trim()) {
+                            next[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
+                          } else {
+                            delete next[`direccion.${field.name}`];
+                          }
+                          return next;
+                        });
+                      }}
+                    />
+                    {fieldErrors[`direccion.${field.name}`] && (
+                      <small className="text-danger d-block" role="alert">
+                        {fieldErrors[`direccion.${field.name}`]}
+                      </small>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
           {entity === "usuarios" && isClientRole && !editingId && (
             <>
               <h4 className="h6 mt-4">Datos del perfil cliente</h4>
@@ -1671,6 +1785,40 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                     )}
                     {fieldErrors[`cliente.${field.name}`] && (
                       <small className="text-danger d-block" role="alert">{fieldErrors[`cliente.${field.name}`]}</small>
+                    )}
+                  </label>
+                ))}
+              </div>
+              <h4 className="h6 mt-4">Dirección del cliente</h4>
+              <div className="admin-entity-fields">
+                {addressFields.map((field) => (
+                  <label className="admin-entity-field" key={field.name}>
+                    <span>{field.label}{field.required ? " *" : ""}</span>
+                    <input
+                      className={`form-control${fieldErrors[`direccion.${field.name}`] ? " is-invalid" : ""}`}
+                      type="text"
+                      value={address[field.name] || ""}
+                      maxLength={field.maxLength}
+                      required={field.required}
+                      aria-invalid={Boolean(fieldErrors[`direccion.${field.name}`])}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setAddress((current) => ({ ...current, [field.name]: value }));
+                        setFieldErrors((current) => {
+                          const next = { ...current };
+                          if (field.required && !value.trim()) {
+                            next[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
+                          } else {
+                            delete next[`direccion.${field.name}`];
+                          }
+                          return next;
+                        });
+                      }}
+                    />
+                    {fieldErrors[`direccion.${field.name}`] && (
+                      <small className="text-danger d-block" role="alert">
+                        {fieldErrors[`direccion.${field.name}`]}
+                      </small>
                     )}
                   </label>
                 ))}
