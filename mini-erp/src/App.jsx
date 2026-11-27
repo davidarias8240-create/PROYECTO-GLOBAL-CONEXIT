@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./pages/login";
 import Home from "./pages/home";
+import PasswordRecovery from "./pages/PasswordRecovery";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ClientPortal from "./pages/interfazcliente";
 import EntityAdmin from "./pages/EntidadAdmin";
@@ -21,6 +22,7 @@ function App() {
                 <Route path="/admin" element={
                         <Login />
                     }/>
+                <Route path="/recuperar-contrasena/:rol" element={<PasswordRecovery />} />
                 <Route path="/dashboard" element={
                     <DashboardLayout>
                         <Dashboard />

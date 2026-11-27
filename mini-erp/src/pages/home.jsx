@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import SpeedTest from "@cloudflare/speedtest";
 import logo from "../assets/logo.png";
 import Formcliente from "../components/Formcliente";
@@ -101,6 +102,8 @@ const portalItems = [
 ];
 
 function Home() {
+	const location = useLocation();
+	const navigate = useNavigate();
 	const landingPageRef = useRef(null);
 	const heroTitleRef = useRef(null);
 	const speedTestRef = useRef(null);
@@ -108,7 +111,7 @@ function Home() {
 	const speedTestStartedRef = useRef(false);
 	const initialLoadStartedAtRef = useRef(0);
 	const [theme, toggleTheme] = useTheme();
-	const [showClientLogin, setShowClientLogin] = useState(false);
+	const [showClientLogin, setShowClientLogin] = useState(() => Boolean(location.state?.openClientLogin));
 	const [selectedPlan, setSelectedPlan] = useState(null);
 	const [plansState, setPlansState] = useState({ status: "loading", items: [], error: "" });
 	const [plansReload, setPlansReload] = useState(0);
@@ -119,6 +122,11 @@ function Home() {
 	useEffect(() => {
 		initialLoadStartedAtRef.current = Date.now();
 	}, []);
+
+	useEffect(() => {
+		if (!location.state?.openClientLogin) return;
+		navigate(location.pathname, { replace: true, state: null });
+	}, [location.pathname, location.state, navigate]);
 
 	useEffect(() => {
 		if (plansState.status === "loading" || activeClientsState.status === "loading") return undefined;

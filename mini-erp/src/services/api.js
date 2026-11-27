@@ -49,6 +49,36 @@ export function iniciarSesionAdmin(credenciales) {
   return request("admin/auth.php", { method: "POST", body: credenciales });
 }
 
+function rutaRecuperacion(rol, endpoint) {
+  const base = rol === "cliente" ? "clientes" : rol === "administrador" ? "admin" : null;
+  if (!base) throw new Error("El tipo de recuperación no es válido.");
+  return `${base}/${endpoint}.php`;
+}
+
+export function solicitarRecuperacionContrasena(rol, correo) {
+  return request(rutaRecuperacion(rol, "solicitar_recuperacion"), {
+    method: "POST",
+    body: { correo },
+    credentials: "omit",
+  });
+}
+
+export function validarTokenRecuperacion(rol, token) {
+  return request(rutaRecuperacion(rol, "validar_token_recuperacion"), {
+    method: "POST",
+    body: { token },
+    credentials: "omit",
+  });
+}
+
+export function restablecerContrasena(rol, token, contrasena, confirmarContrasena) {
+  return request(rutaRecuperacion(rol, "restablecer_contrasena"), {
+    method: "POST",
+    body: { token, contrasena, confirmar_contrasena: confirmarContrasena },
+    credentials: "omit",
+  });
+}
+
 export function verificarSesionAdmin() {
   return request("admin/auth.php");
 }

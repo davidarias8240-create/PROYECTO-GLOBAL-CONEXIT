@@ -73,6 +73,13 @@ function FormAdmin() {
                         {isSubmitting ? "Validando..." : "Iniciar sesión"} <span aria-hidden="true">→</span>
                     </button>
                 </form>
+                <button
+                    type="button"
+                    className="password-recovery-link"
+                    onClick={() => navigate("/recuperar-contrasena/administrador")}
+                >
+                    ¿Olvidaste tu contraseña?
+                </button>
                 <button type="button" className="btn btn-outline-secondary w-100 mt-3" onClick={() => navigate("/")}>
                     Volver a la página principal
                 </button>
