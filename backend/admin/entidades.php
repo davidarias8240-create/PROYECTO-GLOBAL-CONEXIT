@@ -654,7 +654,7 @@ function obtenerOpcionesRelacion(
         $fromSql = "cliente";
     } elseif ($tabla === "direccion") {
         $candidateSql = "direccion.id_direccion AS id, direccion.direccion, direccion.ciudad,
-            direccion.id_cliente AS cliente_id";
+            direccion.departamento, direccion.referencia, direccion.id_cliente AS cliente_id";
         $fromSql = "direccion";
     } elseif ($tabla === "plan") {
         $candidateSql = "plan.id_plan AS id, plan.nombre, plan.precio, plan.velocidad";
@@ -805,7 +805,13 @@ function obtenerOpcionesRelacion(
                 "telefono" => $row["telefono"],
                 "correo" => $row["correo"],
             ],
-            "direccion" => ["cliente_id" => $row["cliente_id"]],
+            "direccion" => [
+                "cliente_id" => $row["cliente_id"],
+                "direccion" => $row["direccion"],
+                "ciudad" => $row["ciudad"],
+                "departamento" => $row["departamento"],
+                "referencia" => $row["referencia"],
+            ],
             "contrato" => [
                 "cliente_id" => $row["cliente_id"],
                 "direccion_id" => $row["direccion_id"],
@@ -1076,11 +1082,21 @@ try {
             // Crear un cliente desde esta pantalla también crea su cuenta de acceso con rol CLIENTE.
             $password = is_string($data["contrasena"] ?? null) ? $data["contrasena"] : "";
             $correo = is_string($input["correo"] ?? null) ? trim($input["correo"]) : "";
+            $direccion = is_array($data["direccion"] ?? null) ? $data["direccion"] : [];
             if (strlen($password) < 8) {
                 responder(["error" => "La contraseña debe tener al menos 8 caracteres"], 400);
             }
             if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
                 responder(["error" => "Ingresa un correo válido para el cliente"], 400);
+            }
+            foreach (["direccion", "ciudad", "departamento"] as $requiredAddressField) {
+                if (!is_string($direccion[$requiredAddressField] ?? null)
+                    || trim($direccion[$requiredAddressField]) === "") {
+                    responder([
+                        "error" => "Completa la información de dirección del cliente",
+                        "campo" => $requiredAddressField,
+                    ], 400);
+                }
             }
             unset($input["id_usuario"]);
         }
@@ -1251,6 +1267,23 @@ try {
             array_values($values)
         ));
         $newId = (string) $pdo->lastInsertId();
+        if ($tabla === "cliente") {
+            $addressInsert = $pdo->prepare(
+                "INSERT INTO direccion
+                    (id_cliente, direccion, ciudad, departamento, referencia, estado)
+                 VALUES
+                    (:id_cliente, :direccion, :ciudad, :departamento, :referencia, 'ACTIVA')"
+            );
+            $addressInsert->execute([
+                ":id_cliente" => $newId,
+                ":direccion" => trim($direccion["direccion"]),
+                ":ciudad" => trim($direccion["ciudad"]),
+                ":departamento" => trim($direccion["departamento"]),
+                ":referencia" => isset($direccion["referencia"]) && trim((string) $direccion["referencia"]) !== ""
+                    ? trim((string) $direccion["referencia"])
+                    : null,
+            ]);
+        }
         if ($idClienteContexto !== null
             && !registroPerteneceACliente($pdo, $entidad, $tabla, $clave, $newId, $idClienteContexto)) {
             $pdo->rollBack();
@@ -1272,6 +1305,7 @@ try {
             $role->execute([":id_rol" => $values["id_rol"]]);
             if ($role->fetchColumn() === "CLIENTE") {
                 $client = is_array($data["cliente"] ?? null) ? $data["cliente"] : [];
+                $direccion = is_array($data["direccion"] ?? null) ? $data["direccion"] : [];
                 $requiredClientFields = ["numero_cliente", "tipo_documento", "numero_documento", "nombres"];
                 foreach ($requiredClientFields as $requiredField) {
                     if (!is_string($client[$requiredField] ?? null) || trim($client[$requiredField]) === "") {
@@ -1279,6 +1313,16 @@ try {
                         responder([
                             "error" => "Completa los datos requeridos del perfil cliente: " . $requiredField,
                             "campo" => $requiredField,
+                        ], 400);
+                    }
+                }
+                foreach (["direccion", "ciudad", "departamento"] as $requiredAddressField) {
+                    if (!is_string($direccion[$requiredAddressField] ?? null)
+                        || trim($direccion[$requiredAddressField]) === "") {
+                        $pdo->rollBack();
+                        responder([
+                            "error" => "Completa la información de dirección del cliente",
+                            "campo" => $requiredAddressField,
                         ], 400);
                     }
                 }
@@ -1320,7 +1364,23 @@ try {
                     ":telefono" => trim((string) ($client["telefono"] ?? "")) ?: null,
                     ":correo" => $values["correo"]
                 ]);
-                auditar($pdo, "cliente", (string) $pdo->lastInsertId(), "CREAR", [
+                $newClientId = (string) $pdo->lastInsertId();
+                $addressInsert = $pdo->prepare(
+                    "INSERT INTO direccion
+                        (id_cliente, direccion, ciudad, departamento, referencia, estado)
+                     VALUES
+                        (:id_cliente, :direccion, :ciudad, :departamento, :referencia, 'ACTIVA')"
+                );
+                $addressInsert->execute([
+                    ":id_cliente" => $newClientId,
+                    ":direccion" => trim($direccion["direccion"]),
+                    ":ciudad" => trim($direccion["ciudad"]),
+                    ":departamento" => trim($direccion["departamento"]),
+                    ":referencia" => isset($direccion["referencia"]) && trim((string) $direccion["referencia"]) !== ""
+                        ? trim((string) $direccion["referencia"])
+                        : null,
+                ]);
+                auditar($pdo, "cliente", $newClientId, "CREAR", [
                     "id_usuario" => $newId,
                     "numero_cliente" => $client["numero_cliente"]
                 ]);
