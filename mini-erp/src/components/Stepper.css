@@ -1,0 +1,186 @@
+.stepper {
+  --stepper-accent: #e9650a;
+  width: 100%;
+  min-width: 0;
+  color: var(--text, #1d1b1a);
+}
+
+.stepper__progress {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 2px 2px 18px;
+}
+
+.stepper__indicator {
+  position: relative;
+  display: flex;
+  flex: 1 0 100px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 4px;
+  border: 0;
+  color: var(--muted, #766e67);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.stepper__indicator:not(:last-child)::after {
+  position: absolute;
+  top: 17px;
+  left: calc(50% + 24px);
+  width: calc(100% - 40px);
+  height: 2px;
+  background: var(--gc-border, #e5ded0);
+  content: "";
+}
+
+.stepper__indicator[data-reached="true"]::after {
+  background: color-mix(in srgb, var(--stepper-accent) 36%, var(--gc-border, #e5ded0));
+}
+
+.stepper__number {
+  z-index: 1;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--gc-border, #e5ded0);
+  border-radius: 50%;
+  background: var(--gc-surface, #fff);
+  color: var(--muted, #766e67);
+  font-size: 0.9rem;
+  font-weight: 750;
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.stepper__number.is-reached,
+.stepper__indicator[aria-current="step"] .stepper__number {
+  border-color: var(--stepper-accent);
+  background: var(--stepper-accent);
+  color: #fff;
+}
+
+.stepper__indicator[aria-current="step"] .stepper__number {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--stepper-accent) 16%, transparent);
+}
+
+.stepper__label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted, #766e67);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stepper__indicator[aria-current="step"] .stepper__label {
+  color: var(--stepper-accent);
+}
+
+.stepper__indicator:focus-visible,
+.stepper__button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--stepper-accent) 35%, transparent);
+  outline-offset: 3px;
+}
+
+.stepper__content {
+  min-height: 235px;
+  padding: 12px 4px 24px;
+  animation: stepper-enter 220ms ease-out;
+}
+
+.stepper__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--gc-border, #e5ded0);
+  padding-top: 18px;
+}
+
+.stepper__button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 20px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.stepper__button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.stepper__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.stepper__button--back {
+  border-color: var(--gc-border, #e5ded0);
+  color: var(--text, #1d1b1a);
+  background: var(--gc-surface-muted, #fcfaf4);
+}
+
+.stepper__button--next {
+  margin-left: auto;
+  color: #fff;
+  background: var(--stepper-accent);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--stepper-accent) 24%, transparent);
+}
+
+.stepper__button--next:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--stepper-accent) 88%, #000);
+}
+
+.stepper__counter {
+  color: var(--muted, #766e67);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes stepper-enter {
+  from { transform: translateX(10px); opacity: 0.55; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+:root[data-theme="dark"] .stepper__number {
+  border-color: #505659;
+  background: #222629;
+}
+
+:root[data-theme="dark"] .stepper__indicator:not(:last-child)::after {
+  background: #45494b;
+}
+
+:root[data-theme="dark"] .stepper__button--back {
+  border-color: #505659;
+  background: #222629;
+}
+
+@media (max-width: 600px) {
+  .stepper__progress { justify-content: flex-start; }
+  .stepper__indicator { flex-basis: 80px; }
+  .stepper__label { font-size: 0.72rem; }
+  .stepper__content { min-height: 190px; padding-right: 0; padding-left: 0; }
+  .stepper__button { min-height: 42px; padding: 0 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stepper__number,
+  .stepper__button { transition-duration: 0.01ms; }
+  .stepper__content { animation-duration: 0.01ms; }
+}

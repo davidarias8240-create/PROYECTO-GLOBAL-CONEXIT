@@ -208,6 +208,26 @@ function normalizarValor(array $column, mixed $value): mixed
     return $value;
 }
 
+function generarNumeroCliente(PDO $pdo, string $idCliente): string
+{
+    $base = "CLI-" . str_pad((string) max(1, (int) $idCliente), 6, "0", STR_PAD_LEFT);
+    $numero = $base;
+    $sufijo = 1;
+    do {
+        $stmt = $pdo->prepare(
+            "SELECT 1 FROM cliente WHERE numero_cliente = :numero_cliente LIMIT 1"
+        );
+        $stmt->execute([":numero_cliente" => $numero]);
+        $existe = (bool) $stmt->fetchColumn();
+        if ($existe) {
+            $numero = $base . "-" . $sufijo;
+            $sufijo++;
+        }
+    } while ($existe);
+
+    return $numero;
+}
+
 function validarValorEntradaFormulario(
     string $tabla,
     string $campo,
@@ -1099,6 +1119,7 @@ try {
                 }
             }
             unset($input["id_usuario"]);
+            unset($input["numero_cliente"]);
         }
         if ($tabla === "usuario") {
             $password = is_string($data["contrasena"] ?? null) ? $data["contrasena"] : "";
@@ -1154,7 +1175,9 @@ try {
             $values["id_usuario_responsable"] = $idUsuarioPanel;
         }
         foreach ($metadata["columns"] as $column) {
-            if ($column["name"] === $clave || $column["name"] === "contrasena_hash") {
+            if ($column["name"] === $clave
+                || $column["name"] === "contrasena_hash"
+                || ($tabla === "cliente" && $column["name"] === "numero_cliente")) {
                 continue;
             }
             if (!$column["nullable"] && $column["default"] === null && !array_key_exists($column["name"], $values)) {
@@ -1257,6 +1280,7 @@ try {
                 ":contrasena_hash" => password_hash($password, PASSWORD_DEFAULT)
             ]);
             $values["id_usuario"] = (string) $pdo->lastInsertId();
+            $values["numero_cliente"] = "TMP-" . bin2hex(random_bytes(12));
             $names = array_keys($values);
             $fieldsSql = implode(", ", array_map(static fn(string $name): string => "`{$name}`", $names));
             $paramsSql = implode(", ", array_map(static fn(string $name): string => ":" . $name, $names));
@@ -1268,6 +1292,15 @@ try {
         ));
         $newId = (string) $pdo->lastInsertId();
         if ($tabla === "cliente") {
+            $numeroCliente = generarNumeroCliente($pdo, $newId);
+            $numberUpdate = $pdo->prepare(
+                "UPDATE cliente SET numero_cliente = :numero_cliente WHERE id_cliente = :id_cliente"
+            );
+            $numberUpdate->execute([
+                ":numero_cliente" => $numeroCliente,
+                ":id_cliente" => $newId,
+            ]);
+            $values["numero_cliente"] = $numeroCliente;
             $addressInsert = $pdo->prepare(
                 "INSERT INTO direccion
                     (id_cliente, direccion, ciudad, departamento, referencia, estado)
@@ -1306,7 +1339,7 @@ try {
             if ($role->fetchColumn() === "CLIENTE") {
                 $client = is_array($data["cliente"] ?? null) ? $data["cliente"] : [];
                 $direccion = is_array($data["direccion"] ?? null) ? $data["direccion"] : [];
-                $requiredClientFields = ["numero_cliente", "tipo_documento", "numero_documento", "nombres"];
+                $requiredClientFields = ["tipo_documento", "numero_documento", "nombres"];
                 foreach ($requiredClientFields as $requiredField) {
                     if (!is_string($client[$requiredField] ?? null) || trim($client[$requiredField]) === "") {
                         $pdo->rollBack();
@@ -1331,7 +1364,6 @@ try {
                     responder(["error" => "El tipo de documento no es válido", "campo" => "tipo_documento"], 400);
                 }
                 $clientFields = [
-                    "numero_cliente" => ["type" => "varchar", "columnType" => "varchar(30)"],
                     "numero_documento" => ["type" => "varchar", "columnType" => "varchar(30)"],
                     "nombres" => ["type" => "varchar", "columnType" => "varchar(120)"],
                     "telefono" => ["type" => "varchar", "columnType" => "varchar(30)"],
@@ -1355,9 +1387,10 @@ try {
                      VALUES
                         (:id_usuario, :numero_cliente, :tipo_documento, :numero_documento, :nombres, :telefono, :correo, 'ACTIVO')"
                 );
+                $numeroClienteTemporal = "TMP-" . bin2hex(random_bytes(12));
                 $clientInsert->execute([
                     ":id_usuario" => $newId,
-                    ":numero_cliente" => trim($client["numero_cliente"]),
+                    ":numero_cliente" => $numeroClienteTemporal,
                     ":tipo_documento" => trim($client["tipo_documento"]),
                     ":numero_documento" => trim($client["numero_documento"]),
                     ":nombres" => trim($client["nombres"]),
@@ -1365,6 +1398,14 @@ try {
                     ":correo" => $values["correo"]
                 ]);
                 $newClientId = (string) $pdo->lastInsertId();
+                $numeroCliente = generarNumeroCliente($pdo, $newClientId);
+                $numberUpdate = $pdo->prepare(
+                    "UPDATE cliente SET numero_cliente = :numero_cliente WHERE id_cliente = :id_cliente"
+                );
+                $numberUpdate->execute([
+                    ":numero_cliente" => $numeroCliente,
+                    ":id_cliente" => $newClientId,
+                ]);
                 $addressInsert = $pdo->prepare(
                     "INSERT INTO direccion
                         (id_cliente, direccion, ciudad, departamento, referencia, estado)
@@ -1382,7 +1423,7 @@ try {
                 ]);
                 auditar($pdo, "cliente", $newClientId, "CREAR", [
                     "id_usuario" => $newId,
-                    "numero_cliente" => $client["numero_cliente"]
+                    "numero_cliente" => $numeroCliente
                 ]);
             }
         }
