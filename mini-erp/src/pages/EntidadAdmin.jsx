@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
@@ -106,6 +106,26 @@ function documentMoney(value) {
     currency: "COP",
     minimumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function requestSummary(message) {
+  const text = String(message || "");
+  const extract = (pattern) => {
+    const match = text.match(pattern);
+    return match?.[1]?.trim() || "";
+  };
+
+  return {
+    plan: extract(/Solicitud para el plan\s+(.+?)\.\s*Documento:/i),
+    document: extract(/Documento:\s*([^.\n]+)\.\s*Direcci[oó]n/i),
+    address: extract(/Direcci[oó]n de instalaci[oó]n:\s*([^.\n]+)\.\s*(?:El titular|El titular)/i)
+      || extract(/Direcci[oó]n de instalaci[oó]n:\s*([^.\n]+)/i),
+    authorization: /Autorizaci[oó]n para fines comerciales:\s*Si\b/i.test(text)
+      ? "Sí"
+      : /Autorizaci[oó]n para fines comerciales:\s*No\b/i.test(text)
+        ? "No"
+        : "No especificada",
+  };
 }
 
 function documentField(label, value) {
@@ -551,6 +571,8 @@ function EntityField({
 
 function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const contextReadOnly = Boolean(customerId && ["planes", "periodos"].includes(entity));
+  const navigate = useNavigate();
+  const location = useLocation();
   const [metadata, setMetadata] = useState(null);
   const [rows, setRows] = useState([]);
   const [values, setValues] = useState({});
@@ -576,6 +598,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const lastClientSearch = useRef("");
   const relationRequestSequence = useRef(0);
   const paymentIdempotencyKey = useRef(null);
+  const contractPrefillRef = useRef(false);
 
   const loadData = useCallback(async (clientSearch = "") => {
     const requestId = ++requestSequence.current;
@@ -599,6 +622,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   useEffect(() => {
     lastClientSearch.current = "";
+    contractPrefillRef.current = false;
     setMetadata(null);
     setRows([]);
     setShowForm(false);
@@ -660,10 +684,24 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   // La clave primaria y referencias sin etiqueta se ocultan; las claves foráneas muestran su nombre relacionado.
   const tableColumns = useMemo(
-    () => visibleColumns.filter((column) =>
-      !column.name.startsWith("id_") || (column.name !== metadata?.clave && column.relation)
-    ),
-    [metadata, visibleColumns]
+    () => entity === "solicitudes"
+      ? [
+          {
+            name: "numero_radicado",
+            type: "varchar",
+            columnType: "varchar(30)",
+            nullable: false,
+          },
+          ...visibleColumns.filter((column) =>
+            column.name !== "id_cliente"
+            && column.name !== metadata?.clave
+            && !column.name.startsWith("id_")
+          ),
+        ]
+      : visibleColumns.filter((column) =>
+          !column.name.startsWith("id_") || (column.name !== metadata?.clave && column.relation)
+        ),
+    [entity, metadata, visibleColumns]
   );
 
   const formColumns = useMemo(
@@ -735,6 +773,23 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setTicketComment("");
   };
 
+  const handleCreateContractFromRequest = async (row) => {
+    if (!window.confirm(`¿Crear el contrato para el radicado SOL-${String(row[metadata.clave]).padStart(6, "0")}?`)) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      await guardarRegistroEntidad("solicitudes", {
+        datos: { estado: "ATENDIDA" },
+      }, row[metadata.clave], customerId);
+      navigate("/contratos", { state: { solicitud: row } });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTicketManagement = async (event) => {
     event.preventDefault();
     if (!selectedTicket) return;
@@ -779,13 +834,16 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     }
   };
 
-  const startCreate = () => {
+  const startCreate = (overrides = null) => {
     setNotice("");
     paymentIdempotencyKey.current = entity === "pagos" ? createIdempotencyKey() : null;
     const initialValues = Object.fromEntries(createFormColumns.map((column) => [
       column.name,
       defaultFieldValue(column),
     ]));
+    if (overrides && typeof overrides === "object" && !overrides.nativeEvent) {
+      Object.assign(initialValues, overrides);
+    }
     if (entity === "pagos" && Object.hasOwn(initialValues, "fecha")) {
       initialValues.fecha = currentBusinessDateTime();
     }
@@ -806,6 +864,44 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setEditingId(null);
     setShowForm(true);
   };
+
+  useEffect(() => {
+    const solicitud = location.state?.solicitud;
+    if (entity !== "contratos" || !solicitud || !metadata || contractPrefillRef.current) return;
+
+    contractPrefillRef.current = true;
+    const message = String(solicitud.mensaje || "");
+    const planMatch = message.match(/Solicitud para el plan\s+([^.]+)\./i);
+    const addressMatch = message.match(/Direcci[oó]n de instalaci[oó]n:\s*([^.\n]+)/i);
+    const planName = planMatch?.[1]?.trim();
+    const addressName = addressMatch?.[1]?.trim();
+
+    const getColumn = (name) => metadata.columnas.find((column) => column.name === name);
+    const clientColumn = getColumn("id_cliente");
+    const planColumn = getColumn("id_plan");
+    const addressColumn = getColumn("id_direccion");
+    const clientOption = clientColumn?.options?.find((option) =>
+      String(option.details?.correo || "").toLocaleLowerCase("es") === String(solicitud.correo || "").toLocaleLowerCase("es")
+      || String(option.label || "").toLocaleLowerCase("es").includes(String(solicitud.nombre_contacto || "").toLocaleLowerCase("es"))
+    );
+    const planOption = planColumn?.options?.find((option) =>
+      planName && String(option.label || "").toLocaleLowerCase("es").includes(planName.toLocaleLowerCase("es"))
+    );
+    const addressOption = addressColumn?.options?.find((option) =>
+      addressName && String(option.label || "").toLocaleLowerCase("es").includes(addressName.toLocaleLowerCase("es"))
+    );
+
+    const businessDate = currentBusinessDate();
+    const overrides = {
+      fecha_inicio: `${businessDate.year}-${String(businessDate.month).padStart(2, "0")}-${String(businessDate.day).padStart(2, "0")}`,
+      estado: "ACTIVO",
+    };
+    if (clientOption) overrides.id_cliente = clientOption.value;
+    if (planOption) overrides.id_plan = planOption.value;
+    if (addressOption) overrides.id_direccion = addressOption.value;
+    startCreate(overrides);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [entity, location, metadata, navigate]);
 
   const handleFieldChange = (column, value) => {
     setValues((current) => {
@@ -1254,6 +1350,25 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   };
 
   const renderCell = (column, row) => {
+    if (column.name === "numero_radicado") {
+      return `SOL-${String(row[metadata.clave]).padStart(6, "0")}`;
+    }
+    if (entity === "solicitudes" && column.name === "mensaje") {
+      const summary = requestSummary(row.mensaje);
+      return (
+        <details className="request-message-summary">
+          <summary>
+            <strong>{summary.plan || "Solicitud de servicio"}</strong>
+            {summary.address && <span>{summary.address}</span>}
+          </summary>
+          <div className="request-message-details">
+            {summary.document && <div><strong>Documento:</strong> {summary.document}</div>}
+            {summary.address && <div><strong>Dirección:</strong> {summary.address}</div>}
+            <div><strong>Autorización comercial:</strong> {summary.authorization}</div>
+          </div>
+        </details>
+      );
+    }
     const value = row[column.name];
     if (value === null || value === undefined || value === "") return "—";
     if (column.relation) {
@@ -1644,6 +1759,20 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                       )}
                       {canManageRecords && (
                         <>
+                          {entity === "solicitudes" && !["CERRADA", "CANCELADA"].includes(row.estado) && (
+                            <button
+                              type="button"
+                              className="btn btn-success btn-sm"
+                              title="Crear contrato"
+                              aria-label={`Crear contrato para la solicitud ${row.id_solicitud}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleCreateContractFromRequest(row);
+                              }}
+                            >
+                              <i className="bi bi-file-earmark-text" aria-hidden="true" />
+                            </button>
+                          )}
                           {entity === "tickets" && metadata.permisos?.gestion_ticket && (
                             <button
                               type="button"

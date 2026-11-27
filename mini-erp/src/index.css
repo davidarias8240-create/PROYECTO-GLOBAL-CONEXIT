@@ -415,6 +415,14 @@ textarea {
 .admin-entity-table .table th:last-child { width: 112px; min-width: 112px; }
 .admin-entity-table .table td:last-child .d-flex { gap: 5px; }
 .admin-entity-table .table td:last-child .btn { padding: 0.4rem 0.55rem; }
+.request-message-summary { max-width: 260px; font-size: 0.82rem; line-height: 1.35; }
+.request-message-summary summary { cursor: pointer; color: inherit; }
+.request-message-summary summary strong { display: block; font-size: 0.86rem; }
+.request-message-summary summary span { display: block; max-width: 100%; margin-top: 3px; color: #7c8491; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.request-message-details { display: grid; gap: 4px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #dfe5ed; font-size: 0.78rem; }
+.request-message-details div { overflow-wrap: anywhere; }
+:root[data-theme="dark"] .request-message-summary summary span { color: #b7c1ce; }
+:root[data-theme="dark"] .request-message-details { border-top-color: #45494b; }
 
 @media (max-width: 768px) {
   .sidebar { width: 100%; height: auto; min-height: auto; position: static; }
