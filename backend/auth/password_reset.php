@@ -125,7 +125,8 @@ function passwordResetTokenIsValid(string $token): bool
 
 function passwordResetBaseUrl(): ?string
 {
-    $configuredUrl = trim((string) (getenv("PASSWORD_RESET_BASE_URL") ?: ""));
+    $config = cargarConfiguracionMailer();
+    $configuredUrl = trim((string) ($config["password_reset_base_url"] ?? ""));
     $parts = parse_url($configuredUrl);
     if (!is_array($parts)
         || !isset($parts["scheme"], $parts["host"])
