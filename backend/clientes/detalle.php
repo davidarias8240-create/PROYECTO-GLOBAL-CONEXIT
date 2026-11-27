@@ -33,11 +33,14 @@ if ($_SERVER["REQUEST_METHOD"] !== "GET") {
     exit;
 }
 
-if (!administradorAutenticado($pdo)) {
+$usuarioPanel = usuarioPanelAdministrativoAutenticado($pdo);
+if ($usuarioPanel === null) {
     http_response_code(401);
-    echo json_encode(["error" => "Inicia sesión como administrador"], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["error" => "Inicia sesión en el panel administrativo"], JSON_UNESCAPED_UNICODE);
     exit;
 }
+$rolPanel = $usuarioPanel["rol"];
+$idUsuarioPanel = $usuarioPanel["id_usuario"];
 
 function existeBaja(PDO $pdo, string $entidad, string $idRegistro): bool
 {
@@ -80,6 +83,171 @@ $cliente = $clienteStmt->fetch();
 if (!$cliente) {
     http_response_code(404);
     echo json_encode(["error" => "No se encontró el cliente solicitado"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+if ($rolPanel === "TECNICO") {
+    $scopeCliente = filtroAlcanceAdministrativo($rolPanel, "clientes");
+    $clienteVisible = $pdo->prepare(
+        "SELECT 1 FROM cliente t WHERE t.id_cliente = :id_cliente AND ({$scopeCliente}) LIMIT 1"
+    );
+    $clienteVisible->execute(array_merge(
+        [":id_cliente" => $idCliente],
+        parametrosAlcanceAdministrativo($rolPanel, "clientes", $idUsuarioPanel)
+    ));
+    if (!$clienteVisible->fetchColumn()) {
+        http_response_code(404);
+        echo json_encode(["error" => "No se encontró el cliente solicitado"], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    $direccionesStmt = $pdo->prepare(
+        "SELECT t.*
+         FROM direccion t
+         WHERE t.id_cliente = :id_cliente
+           AND (" . filtroAlcanceAdministrativo($rolPanel, "direcciones") . ")
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'direcciones' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(t.id_direccion AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY t.id_direccion DESC"
+    );
+    $direccionesStmt->execute(array_merge(
+        [":id_cliente" => $idCliente],
+        parametrosAlcanceAdministrativo($rolPanel, "direcciones", $idUsuarioPanel)
+    ));
+    $direcciones = $direccionesStmt->fetchAll();
+
+    $contratosStmt = $pdo->prepare(
+        "SELECT DISTINCT co.id_contrato, co.id_cliente, co.id_plan, co.id_direccion,
+                co.fecha_inicio, co.fecha_fin, co.estado, p.nombre AS plan_nombre,
+                p.velocidad, d.direccion, d.ciudad, d.departamento
+         FROM contrato co
+         INNER JOIN plan p ON p.id_plan = co.id_plan
+         INNER JOIN direccion d ON d.id_direccion = co.id_direccion
+         INNER JOIN orden_servicio os ON os.id_contrato = co.id_contrato
+         WHERE co.id_cliente = :id_cliente
+           AND os.id_usuario_tecnico = :id_usuario_tecnico
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'contratos' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(co.id_contrato AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'ordenes' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(os.id_orden AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY co.fecha_inicio DESC, co.id_contrato DESC"
+    );
+    $contratosStmt->execute([
+        ":id_cliente" => $idCliente,
+        ":id_usuario_tecnico" => $idUsuarioPanel,
+    ]);
+    $contratos = $contratosStmt->fetchAll();
+
+    $solicitudesStmt = $pdo->prepare(
+        "SELECT s.*
+         FROM solicitud_servicio s
+         WHERE s.id_cliente = :id_cliente
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'solicitudes' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(s.id_solicitud AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY s.fecha DESC"
+    );
+    $solicitudesStmt->execute([":id_cliente" => $idCliente]);
+    $solicitudes = $solicitudesStmt->fetchAll();
+
+    $ticketsStmt = $pdo->prepare(
+        "SELECT t.*
+         FROM ticket t
+         WHERE t.id_cliente = :id_cliente
+           AND t.id_usuario_responsable = :id_usuario_responsable
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(t.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY t.fecha_creacion DESC"
+    );
+    $ticketsStmt->execute([
+        ":id_cliente" => $idCliente,
+        ":id_usuario_responsable" => $idUsuarioPanel,
+    ]);
+    $tickets = $ticketsStmt->fetchAll();
+
+    $interaccionesStmt = $pdo->prepare(
+        "SELECT i.*, t.id_cliente, t.asunto, u.correo AS responsable_correo
+         FROM interaccion i
+         INNER JOIN ticket t ON t.id_ticket = i.id_ticket
+         LEFT JOIN usuario u ON u.id_usuario = i.id_usuario
+         WHERE t.id_cliente = :id_cliente
+           AND t.id_usuario_responsable = :id_usuario_responsable
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'interacciones' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(i.id_interaccion AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(t.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY i.fecha DESC"
+    );
+    $interaccionesStmt->execute([
+        ":id_cliente" => $idCliente,
+        ":id_usuario_responsable" => $idUsuarioPanel,
+    ]);
+    $interacciones = $interaccionesStmt->fetchAll();
+
+    $ordenesStmt = $pdo->prepare(
+        "SELECT os.id_orden, os.id_contrato, os.id_direccion, os.tipo, os.descripcion,
+                os.prioridad, os.estado, os.fecha_creacion, os.fecha_programada,
+                os.franja_atencion, os.resultado, os.fecha_cierre, os.motivo_reprogramacion
+         FROM orden_servicio os
+         INNER JOIN contrato co ON co.id_contrato = os.id_contrato
+         WHERE co.id_cliente = :id_cliente
+           AND os.id_usuario_tecnico = :id_usuario_tecnico
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'ordenes' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(os.id_orden AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY os.fecha_creacion DESC"
+    );
+    $ordenesStmt->execute([
+        ":id_cliente" => $idCliente,
+        ":id_usuario_tecnico" => $idUsuarioPanel,
+    ]);
+    $ordenes = $ordenesStmt->fetchAll();
+
+    unset($cliente["id_usuario"], $cliente["correo_usuario"], $cliente["estado_usuario"]);
+    $resumen = [
+        "cantidad_servicios" => count($contratos),
+        "cantidad_solicitudes" => count($solicitudes),
+        "cantidad_tickets" => count($tickets),
+        "cantidad_direcciones" => count($direcciones),
+    ];
+    echo json_encode([
+        "cliente" => $cliente,
+        "direcciones" => $direcciones,
+        "contratos" => $contratos,
+        "solicitudes" => $solicitudes,
+        "tickets" => $tickets,
+        "interacciones" => $interacciones,
+        "notificaciones" => [],
+        "ordenes" => $ordenes,
+        "facturas" => [],
+        "pagos" => [],
+        "ajustes" => [],
+        "historial" => [],
+        "resumen" => $resumen,
+        "permisos" => permisosFrontendAdministrativo($rolPanel),
+    ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;
 }
 
@@ -127,10 +295,18 @@ $solicitudesStmt = $pdo->prepare(
 $solicitudesStmt->execute([":id_cliente" => $idCliente]);
 $solicitudes = $solicitudesStmt->fetchAll();
 
+$ticketScope = $rolPanel === "ASESOR_COMERCIAL"
+    ? "AND (t.id_usuario_responsable = :id_usuario_responsable OR t.id_usuario_responsable IS NULL)"
+    : "";
+$ticketParams = [":id_cliente" => $idCliente];
+if ($rolPanel === "ASESOR_COMERCIAL") {
+    $ticketParams[":id_usuario_responsable"] = $idUsuarioPanel;
+}
 $ticketStmt = $pdo->prepare(
     "SELECT t.*
      FROM ticket t
      WHERE t.id_cliente = :id_cliente
+       {$ticketScope}
        AND NOT EXISTS (
            SELECT 1 FROM admin_bajas b
            WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
@@ -138,18 +314,36 @@ $ticketStmt = $pdo->prepare(
        )
      ORDER BY t.fecha_creacion DESC"
 );
-$ticketStmt->execute([":id_cliente" => $idCliente]);
+$ticketStmt->execute($ticketParams);
 $tickets = $ticketStmt->fetchAll();
 
+$interactionScope = $rolPanel === "ASESOR_COMERCIAL"
+    ? "AND (t.id_usuario_responsable = :id_usuario_responsable OR t.id_usuario_responsable IS NULL)"
+    : "";
+$interactionParams = [":id_cliente" => $idCliente];
+if ($rolPanel === "ASESOR_COMERCIAL") {
+    $interactionParams[":id_usuario_responsable"] = $idUsuarioPanel;
+}
 $interaccionesStmt = $pdo->prepare(
     "SELECT i.*, t.id_cliente, t.asunto, u.correo AS responsable_correo
      FROM interaccion i
      INNER JOIN ticket t ON t.id_ticket = i.id_ticket
      LEFT JOIN usuario u ON u.id_usuario = i.id_usuario
      WHERE t.id_cliente = :id_cliente
+       {$interactionScope}
+       AND NOT EXISTS (
+           SELECT 1 FROM admin_bajas b
+           WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'interacciones' COLLATE utf8mb4_unicode_ci
+             AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(i.id_interaccion AS CHAR) COLLATE utf8mb4_unicode_ci
+       )
+       AND NOT EXISTS (
+           SELECT 1 FROM admin_bajas b
+           WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'tickets' COLLATE utf8mb4_unicode_ci
+             AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(t.id_ticket AS CHAR) COLLATE utf8mb4_unicode_ci
+       )
      ORDER BY i.fecha DESC"
 );
-$interaccionesStmt->execute([":id_cliente" => $idCliente]);
+$interaccionesStmt->execute($interactionParams);
 $interacciones = $interaccionesStmt->fetchAll();
 
 $notificacionesStmt = $pdo->prepare(
@@ -202,33 +396,39 @@ $pagosStmt = $pdo->prepare(
 $pagosStmt->execute([":id_cliente" => $idCliente]);
 $pagos = $pagosStmt->fetchAll();
 
-$ajustesStmt = $pdo->prepare(
-    "SELECT af.*, f.numero AS numero_factura, u.correo AS usuario_correo
-     FROM ajuste_factura af
-     INNER JOIN factura f ON f.id_factura = af.id_factura
-     INNER JOIN contrato co ON co.id_contrato = f.id_contrato
-     LEFT JOIN usuario u ON u.id_usuario = af.id_usuario
-     WHERE co.id_cliente = :id_cliente
-       AND NOT EXISTS (
-           SELECT 1 FROM admin_bajas b
-           WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'ajustes' COLLATE utf8mb4_unicode_ci
-             AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(af.id_ajuste AS CHAR) COLLATE utf8mb4_unicode_ci
-       )
-     ORDER BY af.fecha DESC"
-);
-$ajustesStmt->execute([":id_cliente" => $idCliente]);
-$ajustes = $ajustesStmt->fetchAll();
+$ajustes = [];
+if (permisoEntidadAdministrativa($rolPanel, "ajustes")["leer"]) {
+    $ajustesStmt = $pdo->prepare(
+        "SELECT af.*, f.numero AS numero_factura, u.correo AS usuario_correo
+         FROM ajuste_factura af
+         INNER JOIN factura f ON f.id_factura = af.id_factura
+         INNER JOIN contrato co ON co.id_contrato = f.id_contrato
+         LEFT JOIN usuario u ON u.id_usuario = af.id_usuario
+         WHERE co.id_cliente = :id_cliente
+           AND NOT EXISTS (
+               SELECT 1 FROM admin_bajas b
+               WHERE b.entidad COLLATE utf8mb4_unicode_ci = 'ajustes' COLLATE utf8mb4_unicode_ci
+                 AND b.id_registro COLLATE utf8mb4_unicode_ci = CAST(af.id_ajuste AS CHAR) COLLATE utf8mb4_unicode_ci
+           )
+         ORDER BY af.fecha DESC"
+    );
+    $ajustesStmt->execute([":id_cliente" => $idCliente]);
+    $ajustes = $ajustesStmt->fetchAll();
+}
 
-$historialStmt = $pdo->prepare(
-    "SELECT a.*
-     FROM auditoria a
-     WHERE a.entidad = 'cliente'
-       AND a.id_entidad = :id_cliente
-     ORDER BY a.fecha DESC
-     LIMIT 50"
-);
-$historialStmt->execute([":id_cliente" => (string) $idCliente]);
-$historial = $historialStmt->fetchAll();
+$historial = [];
+if ($rolPanel === "ADMINISTRADOR") {
+    $historialStmt = $pdo->prepare(
+        "SELECT a.*
+         FROM auditoria a
+         WHERE a.entidad = 'cliente'
+           AND a.id_entidad = :id_cliente
+         ORDER BY a.fecha DESC
+         LIMIT 50"
+    );
+    $historialStmt->execute([":id_cliente" => (string) $idCliente]);
+    $historial = $historialStmt->fetchAll();
+}
 
 $totalFacturado = array_reduce($facturas, static fn(float $total, array $factura): float => $total + (float) ($factura["total"] ?? 0), 0.0);
 $totalPagado = array_reduce($pagos, static function (float $total, array $pago): float {
@@ -248,8 +448,14 @@ $resumen = [
     "total_facturado" => $totalFacturado,
     "total_pagado" => $totalPagado,
     "saldo_pendiente" => $saldoPendiente,
-    "ajustes_total" => $ajustesTotal,
 ];
+if (permisoEntidadAdministrativa($rolPanel, "ajustes")["leer"]) {
+    $resumen["ajustes_total"] = $ajustesTotal;
+}
+
+if ($rolPanel !== "ADMINISTRADOR") {
+    unset($cliente["id_usuario"], $cliente["correo_usuario"], $cliente["estado_usuario"]);
+}
 
 echo json_encode([
     "cliente" => $cliente,
@@ -264,4 +470,5 @@ echo json_encode([
     "ajustes" => $ajustes,
     "historial" => $historial,
     "resumen" => $resumen,
+    "permisos" => permisosFrontendAdministrativo($rolPanel),
 ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);

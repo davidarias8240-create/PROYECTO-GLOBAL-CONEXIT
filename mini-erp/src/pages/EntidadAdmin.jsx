@@ -55,6 +55,20 @@ function ticketStatusLabel(status) {
   return labels[status] || status;
 }
 
+function technicianOrderStatuses(state, hasSchedule) {
+  const transitions = {
+    PENDIENTE: ["PROGRAMADA", "CANCELADA"],
+    PROGRAMADA: ["EN_PROCESO", "REPROGRAMADA", "CANCELADA"],
+    EN_PROCESO: ["CERRADA", "REPROGRAMADA"],
+    REPROGRAMADA: ["PROGRAMADA", "EN_PROCESO", "CANCELADA"],
+    CERRADA: [],
+    CANCELADA: [],
+  };
+  return [state, ...(transitions[state] || [])].filter((status) =>
+    status !== "PROGRAMADA" || hasSchedule
+  );
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (character) => ({
     "&": "&amp;",
@@ -661,6 +675,14 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     ),
     [entity, metadata, visibleColumns]
   );
+  const createFormColumns = useMemo(
+    () => formColumns.filter((column) => column.creatable !== false),
+    [formColumns]
+  );
+  const editFormColumns = useMemo(
+    () => formColumns.filter((column) => column.editable !== false),
+    [formColumns]
+  );
 
   const isClientRole = useMemo(() => {
     if (entity !== "usuarios") return false;
@@ -760,7 +782,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const startCreate = () => {
     setNotice("");
     paymentIdempotencyKey.current = entity === "pagos" ? createIdempotencyKey() : null;
-    const initialValues = Object.fromEntries(formColumns.map((column) => [
+    const initialValues = Object.fromEntries(createFormColumns.map((column) => [
       column.name,
       defaultFieldValue(column),
     ]));
@@ -894,7 +916,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setNotice("");
     paymentIdempotencyKey.current = null;
     setEditingId(row[metadata.clave]);
-    setValues(Object.fromEntries(formColumns.map((column) => [
+    setValues(Object.fromEntries(editFormColumns.map((column) => [
       column.name,
       fieldValue(column, row[column.name]),
     ])));
@@ -906,7 +928,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const handleSave = async (event) => {
     event.preventDefault();
     if (savingRef.current) return;
-    const errors = validateFieldSet(formColumns, values, entity);
+    const activeFormColumns = editingId ? editFormColumns : createFormColumns;
+    const errors = validateFieldSet(activeFormColumns, values, entity);
     if (entity === "usuarios" && !editingId && isClientRole) {
       if (!["CC", "CE", "NIT", "TI", "PASAPORTE", "OTRO"].includes(customer.tipo_documento)) {
         errors["cliente.tipo_documento"] = "Selecciona un tipo de documento válido.";
@@ -927,7 +950,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setError("");
     setNotice("");
     const datos = {};
-    for (const column of formColumns) {
+    for (const column of activeFormColumns) {
       const value = values[column.name];
       if (value === "" && column.nullable) {
         datos[column.name] = null;
@@ -1244,7 +1267,11 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   };
 
   const canDownloadDocument = ["contratos", "facturas"].includes(entity);
-  const canManageRecords = !metadata?.soloLectura && !contextReadOnly;
+  const canCreateRecords = Boolean(metadata?.permisos?.crear) && !contextReadOnly;
+  const canEditRecords = Boolean(metadata?.permisos?.editar) && !contextReadOnly;
+  const canManageRecords = canCreateRecords || canEditRecords;
+  const canOpenCustomer = entity === "clientes" && Boolean(metadata?.permisos?.leer) && !customerId;
+  const hasRowActions = canManageRecords || canOpenCustomer || canDownloadDocument;
   const downloadDocument = (row) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -1271,7 +1298,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
           <h2 className="mb-1">{metadata?.titulo || "Registros"}</h2>
           <p className="text-muted mb-0">Datos consultados desde la base de datos del sistema.</p>
         </div>
-        {!metadata?.soloLectura && !contextReadOnly && (
+        {canCreateRecords && (
           <button type="button" className="btn btn-success" onClick={startCreate}>
             + Crear {entity === "usuarios" ? "usuario" : entity === "clientes" ? "cliente" : "registro"}
           </button>
@@ -1396,9 +1423,24 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
             <p className="text-muted">Se creará una cuenta de usuario activa con el rol CLIENTE y los datos de acceso indicados abajo.</p>
           )}
           <div className="admin-entity-fields">
-            {formColumns.map((column) => (
+            {(editingId ? editFormColumns : createFormColumns).map((column) => (
               (() => {
                 let fieldColumn = column;
+                if (entity === "ordenes" && editingId && column.name === "estado"
+                  && Array.isArray(metadata.permisos?.campos_edicion)) {
+                  const currentOrder = rows.find((row) =>
+                    String(row[metadata.clave]) === String(editingId)
+                  );
+                  if (currentOrder) {
+                    fieldColumn = {
+                      ...column,
+                      enum: technicianOrderStatuses(
+                        currentOrder.estado,
+                        Boolean(currentOrder.fecha_programada)
+                      ),
+                    };
+                  }
+                }
                 if (entity === "ordenes" && column.name === "id_direccion" && values.id_contrato) {
                   const contract = metadata.columnas
                     .find((item) => item.name === "id_contrato")
@@ -1423,9 +1465,15 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                     onChange={(value) => handleFieldChange(column, value)}
                     onBlur={() => handleFieldBlur(column)}
                     disabled={Boolean(
-                      customerId
-                      && (column.name === "id_cliente"
-                        || (entity === "notificaciones" && column.name === "id_usuario"))
+                      (customerId
+                        && (column.name === "id_cliente"
+                          || (entity === "notificaciones" && column.name === "id_usuario")))
+                      || (entity === "ordenes"
+                        && editingId
+                        && Array.isArray(metadata.permisos?.campos_edicion)
+                        && ["CERRADA", "CANCELADA"].includes(
+                          rows.find((row) => String(row[metadata.clave]) === String(editingId))?.estado
+                        ))
                     )}
                     requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
                   />
@@ -1544,13 +1592,13 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
           <thead className="table-dark">
             <tr>
               {tableColumns.map((column) => <th key={column.name}>{humanize(column.name.replace(/^id_/, ""))}</th>)}
-              {(canManageRecords || canDownloadDocument) && <th>Acciones</th>}
+              {hasRowActions && <th>Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {visibleRows.length === 0 ? (
               <tr>
-                <td colSpan={tableColumns.length + (canManageRecords || canDownloadDocument ? 1 : 0)} className="text-center text-muted">
+                <td colSpan={tableColumns.length + (hasRowActions ? 1 : 0)} className="text-center text-muted">
                   {customerId ? "Este cliente no tiene registros en esta sección." : "No hay registros para mostrar."}
                 </td>
               </tr>
@@ -1563,7 +1611,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                 {tableColumns.map((column) => (
                   <td key={column.name}>{renderCell(column, row)}</td>
                 ))}
-                {(canManageRecords || canDownloadDocument) && (
+                {hasRowActions && (
                   <td>
                     <div className="d-flex justify-content-center align-items-center gap-2 flex-wrap">
                       {canDownloadDocument && (
@@ -1580,9 +1628,23 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                           <i className="bi bi-file-earmark-pdf" aria-hidden="true" />
                         </button>
                       )}
+                      {canOpenCustomer && !canEditRecords && (
+                        <button
+                          type="button"
+                          className="btn btn-info btn-sm text-white"
+                          title="Ver detalle"
+                          aria-label="Ver detalle"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openCustomerDetail(row);
+                          }}
+                        >
+                          <i className="bi bi-eye" aria-hidden="true" />
+                        </button>
+                      )}
                       {canManageRecords && (
                         <>
-                          {entity === "tickets" && (
+                          {entity === "tickets" && metadata.permisos?.gestion_ticket && (
                             <button
                               type="button"
                               className="btn btn-info btn-sm text-white"
@@ -1621,18 +1683,20 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
                               </Link>
                             </>
                           )}
-                          <button
-                            type="button"
-                            className="btn btn-warning btn-sm"
-                            title="Editar"
-                            aria-label="Editar"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              startEdit(row);
-                            }}
-                          >
-                            <i className="bi bi-pencil" aria-hidden="true" />
-                          </button>
+                          {!(entity === "tickets" && metadata.permisos?.gestion_ticket) && (
+                            <button
+                              type="button"
+                              className="btn btn-warning btn-sm"
+                              title="Editar"
+                              aria-label="Editar"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                startEdit(row);
+                              }}
+                            >
+                              <i className="bi bi-pencil" aria-hidden="true" />
+                            </button>
+                          )}
                           {metadata.archivable && (
                             <button
                               type="button"

@@ -48,7 +48,10 @@ function CustomerDetailView({ clienteId, entidad }) {
   }, [clienteId]);
 
   const { detail, loading, error } = state;
-  const selectedSection = customerSections.find((section) => section.key === entidad);
+  const allowedSections = customerSections.filter((section) =>
+    detail?.permisos?.entidades?.[section.key]?.leer
+  );
+  const selectedSection = allowedSections.find((section) => section.key === entidad);
 
   if (loading) {
     return <p role="status">Cargando la información del cliente...</p>;
@@ -105,12 +108,14 @@ function CustomerDetailView({ clienteId, entidad }) {
             <strong>{cliente.estado}</strong>
           </div></div>
         </div>
-        <div className="col-md-6 col-xl-3">
-          <div className="card h-100"><div className="card-body">
-            <small className="text-muted d-block">Saldo pendiente</small>
-            <strong>{currency.format(Number(resumen?.saldo_pendiente || 0))}</strong>
-          </div></div>
-        </div>
+        {detail.permisos?.finanzas_cliente && (
+          <div className="col-md-6 col-xl-3">
+            <div className="card h-100"><div className="card-body">
+              <small className="text-muted d-block">Saldo pendiente</small>
+              <strong>{currency.format(Number(resumen?.saldo_pendiente || 0))}</strong>
+            </div></div>
+          </div>
+        )}
       </div>
 
       <nav className="d-flex flex-wrap gap-2 mb-4" aria-label="Secciones del cliente">
@@ -121,7 +126,7 @@ function CustomerDetailView({ clienteId, entidad }) {
         >
           Resumen
         </Link>
-        {customerSections.map((section) => (
+        {allowedSections.map((section) => (
           <Link
             key={section.key}
             to={`/clientes/${clienteId}/${section.key}`}
@@ -160,8 +165,12 @@ function CustomerDetailView({ clienteId, entidad }) {
                 ["Contratos y servicios", resumen?.cantidad_servicios ?? detail.contratos?.length ?? 0],
                 ["Solicitudes", resumen?.cantidad_solicitudes ?? detail.solicitudes?.length ?? 0],
                 ["Tickets", resumen?.cantidad_tickets ?? detail.tickets?.length ?? 0],
-                ["Total facturado", currency.format(Number(resumen?.total_facturado || 0))],
-                ["Pagos registrados", detail.pagos?.length ?? 0],
+                ...(detail.permisos?.finanzas_cliente
+                  ? [
+                    ["Total facturado", currency.format(Number(resumen?.total_facturado || 0))],
+                    ["Pagos registrados", detail.pagos?.length ?? 0],
+                  ]
+                  : []),
               ].map(([label, value]) => (
                 <div className="col-sm-6 col-lg-4" key={label}>
                   <div className="border rounded p-3 h-100">

@@ -5,15 +5,17 @@ require_once __DIR__ . "/../config/form_validation.php";
 $method = $_SERVER["REQUEST_METHOD"];
 
 if ($method === "GET") {
-    require_once "../config/admin_auth.php";
-
-    if (!administradorAutenticado($pdo)) {
+    $usuario = usuarioPanelAdministrativoAutenticado($pdo);
+    if ($usuario === null) {
         http_response_code(401);
-        echo json_encode(["error" => "Inicia sesión como administrador"], JSON_UNESCAPED_UNICODE);
+        echo json_encode(["error" => "Inicia sesión en el panel administrativo"], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
-    echo json_encode(["success" => true], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        "success" => true,
+        "permisos" => permisosFrontendAdministrativo($usuario["rol"]),
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -45,12 +47,12 @@ if (!filter_var($correo, FILTER_VALIDATE_EMAIL)
 
 try {
     $stmt = $pdo->prepare(
-        "SELECT u.id_usuario, u.contrasena_hash
+        "SELECT u.id_usuario, u.contrasena_hash, r.nombre AS rol
          FROM usuario u
          INNER JOIN rol r ON r.id_rol = u.id_rol
          WHERE u.correo = :correo
            AND u.estado = 'ACTIVO'
-           AND r.nombre = 'ADMINISTRADOR'
+           AND r.nombre IN ('ADMINISTRADOR', 'ASESOR_COMERCIAL', 'TECNICO')
            AND r.estado = 'ACTIVO'
            AND NOT EXISTS (
                 SELECT 1 FROM admin_bajas b
@@ -86,7 +88,10 @@ try {
     $_SESSION["id_usuario"] = (int) $usuario["id_usuario"];
     $_SESSION["tipo_sesion"] = "ADMINISTRADOR";
 
-    echo json_encode(["success" => true], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        "success" => true,
+        "permisos" => permisosFrontendAdministrativo($usuario["rol"]),
+    ], JSON_UNESCAPED_UNICODE);
 } catch (PDOException $exception) {
     error_log("Error iniciando sesión administrativa: " . $exception->getMessage());
     http_response_code(500);
