@@ -26,6 +26,7 @@ function cargarConfiguracionMailer(): array
         "notification_email" => "SMTP_NOTIFICATION_EMAIL",
         "encryption" => "SMTP_ENCRYPTION",
         "password_reset_base_url" => "PASSWORD_RESET_BASE_URL",
+        "smtp_debug" => "SMTP_DEBUG",
     ];
     foreach ($environmentVariables as $field => $variable) {
         $value = getenv($variable);
@@ -88,6 +89,15 @@ function crearMailer(): PHPMailer
 
     $mailer = new PHPMailer(true);
     $mailer->isSMTP();
+    if (filter_var($config["smtp_debug"] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+        $mailer->SMTPDebug = PHPMailer::DEBUG_SERVER;
+        $mailer->Debugoutput = static function (string $message, int $level): void {
+            if (str_contains($message, "CLIENT -> SERVER:")) {
+                return;
+            }
+            error_log("PHPMailer SMTP: " . trim($message));
+        };
+    }
     $mailer->Host = $host;
     $mailer->SMTPAuth = $encryption !== "none";
     $mailer->SMTPAutoTLS = $encryption !== "none";
