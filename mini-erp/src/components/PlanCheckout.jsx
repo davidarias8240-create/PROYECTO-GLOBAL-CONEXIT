@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { crearSolicitudPublica } from "../services/api";
 import ToastMessage from "./ToastMessage";
-import { sanitizeDocument, sanitizePhone, validateDocument, validateEmail } from "../utils/formValidation";
+import { sanitizePhone, validateEmail } from "../utils/formValidation";
+
+function sanitizeIdentityDocument(value) {
+	return value.replace(/\D/g, "").slice(0, 20);
+}
 
 function PlanCheckout({ plan, onClose }) {
 	const [step, setStep] = useState("details");
@@ -12,14 +16,14 @@ function PlanCheckout({ plan, onClose }) {
 	const [requestReference, setRequestReference] = useState("");
 	const [fieldErrors, setFieldErrors] = useState({});
 
-	const validateField = (name, value, documentType) => {
+	const validateField = (name, value) => {
 		const trimmed = value.trim();
 		if (!trimmed) return "Este campo es obligatorio.";
 		if (name === "nombre" && !/^[\p{L}\p{M}]+(?:[ '\u2019-][\p{L}\p{M}]+)*$/u.test(trimmed)) {
 			return "Ingresa un nombre válido, sin números.";
 		}
-		if (name === "documento" && !validateDocument(trimmed, documentType)) {
-			return "El documento contiene caracteres no permitidos para el tipo seleccionado.";
+		if (name === "documento" && !/^\d{1,20}$/.test(trimmed)) {
+			return "Ingresa un documento compuesto solo por números, de máximo 20 dígitos.";
 		}
 		if (name === "email" && !validateEmail(trimmed)) return "Ingresa un correo válido.";
 		if (name === "telefono" && !/^\d{10}$/.test(trimmed)) return "El celular debe tener exactamente 10 dígitos.";
@@ -27,13 +31,12 @@ function PlanCheckout({ plan, onClose }) {
 	};
 
 	const handleFieldChange = (event) => {
-		const { name, form } = event.target;
+		const { name } = event.target;
 		let value = event.target.value;
-		const documentType = form.elements.tipoDocumento.value;
 		if (name === "telefono") value = sanitizePhone(value);
-		if (name === "documento") value = sanitizeDocument(value, documentType, 50);
+		if (name === "documento") value = sanitizeIdentityDocument(value);
 		event.target.value = value;
-		const validation = validateField(name, value, documentType);
+		const validation = validateField(name, value);
 		setFieldErrors((current) => ({ ...current, [name]: validation }));
 	};
 
@@ -45,7 +48,7 @@ function PlanCheckout({ plan, onClose }) {
 		const documentType = String(formValues.tipoDocumento);
 		const errors = {};
 		for (const name of ["nombre", "documento", "email", "telefono", "direccion"]) {
-			const validation = validateField(name, String(formValues[name] || ""), documentType);
+			const validation = validateField(name, String(formValues[name] || ""));
 			if (validation) errors[name] = validation;
 		}
 		if (!["CC", "CE", "PA", "NIT"].includes(documentType)) {
@@ -108,9 +111,9 @@ function PlanCheckout({ plan, onClose }) {
 									defaultValue="CC"
 									onChange={(event) => {
 										const document = event.currentTarget.form.elements.documento;
-										const value = sanitizeDocument(document.value, event.target.value, 50);
+										const value = sanitizeIdentityDocument(document.value);
 										document.value = value;
-										const validation = validateField("documento", value, event.target.value);
+										const validation = validateField("documento", value);
 										setFieldErrors((current) => ({ ...current, documento: validation }));
 									}}
 								>
@@ -120,7 +123,7 @@ function PlanCheckout({ plan, onClose }) {
 							</label>
 							<label className="checkout-field">
 								N.º documento
-								<input name="documento" autoComplete="off" required maxLength="50" onChange={handleFieldChange} onBlur={handleFieldChange} aria-invalid={Boolean(fieldErrors.documento)} />
+								<input name="documento" autoComplete="off" inputMode="numeric" pattern="[0-9]{1,20}" required maxLength="20" onChange={handleFieldChange} onBlur={handleFieldChange} aria-invalid={Boolean(fieldErrors.documento)} />
 								{fieldErrors.documento && <small className="checkout-error" role="alert">{fieldErrors.documento}</small>}
 							</label>
 						</div>

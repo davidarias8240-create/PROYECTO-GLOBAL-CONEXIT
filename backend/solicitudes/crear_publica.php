@@ -58,22 +58,20 @@ if ($planId === false || $planId < 1) {
 $partesDocumento = preg_split('/\s+/', $documento, 2);
 $tipoDocumento = strtoupper((string) ($partesDocumento[0] ?? ""));
 $numeroDocumento = (string) ($partesDocumento[1] ?? "");
-$patronDocumento = match ($tipoDocumento) {
-    "CC", "TI" => '/^[0-9]+$/D',
-    "NIT" => '/^[0-9]+(?:-[0-9])?$/D',
-    "CE", "PA", "PASAPORTE" => '/^[A-Za-z0-9-]+$/D',
-    default => null,
-};
 if (preg_match("/^[\\p{L}\\p{M}]+(?:[ '\\x{2019}-][\\p{L}\\p{M}]+)*$/uD", $nombre) !== 1
     || mb_strlen($nombre) > 150) {
     http_response_code(400);
     echo json_encode(["error" => "Ingresa un nombre válido, sin números y de hasta 150 caracteres"], JSON_UNESCAPED_UNICODE);
     exit;
 }
-if ($patronDocumento === null || preg_match($patronDocumento, $numeroDocumento) !== 1
-    || mb_strlen($numeroDocumento) > 50) {
+if (!in_array($tipoDocumento, ["CC", "TI", "NIT", "CE", "PA", "PASAPORTE"], true)) {
     http_response_code(400);
-    echo json_encode(["error" => "El documento contiene caracteres no permitidos para el tipo seleccionado"], JSON_UNESCAPED_UNICODE);
+    echo json_encode(["error" => "El tipo de documento no es válido"], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+if (preg_match('/^[0-9]{1,20}$/D', $numeroDocumento) !== 1) {
+    http_response_code(400);
+    echo json_encode(["error" => "El documento debe contener solo números y tener máximo 20 dígitos"], JSON_UNESCAPED_UNICODE);
     exit;
 }
 if (preg_match('/^[0-9]{10}$/D', $telefono) !== 1) {
