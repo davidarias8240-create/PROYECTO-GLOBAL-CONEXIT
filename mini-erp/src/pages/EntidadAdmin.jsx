@@ -111,7 +111,6 @@ function buildRelatedDocument(entity, row, metadata) {
     ? `Contrato #${row.id_contrato}`
     : `Factura ${row.numero || `#${row.id_factura}`}`;
   const clientFields = [
-    documentField("Cliente", clientName),
     documentField("Número de cliente", clientDetails?.cliente_numero || clientDetails?.numero_cliente),
     documentField(
       "Documento",
@@ -120,49 +119,87 @@ function buildRelatedDocument(entity, row, metadata) {
     documentField("Teléfono", clientDetails?.telefono),
     documentField("Correo", clientDetails?.correo),
   ].join("");
+  const issuerDetails = `
+    ${documentField("NIT", "900.123.456-7")}
+    ${documentField("Dirección", "Cra. 15 #93-75, Argelia Ant.")}
+    ${documentField("Teléfono", "+57 305-915-7061")}
+    ${documentField("Correo", "soporte@globalconexit.com")}`;
+  const partyDetails = `
+    <section class="party-grid">
+      <article class="party-card">
+        <span class="eyebrow">EMISOR</span>
+        <h2>Global Conexit S.A.S.</h2>
+        <div class="fields">${issuerDetails}</div>
+      </article>
+      <article class="party-card">
+        <span class="eyebrow">CLIENTE</span>
+        <h2>${escapeHtml(clientName || "Cliente")}</h2>
+        <div class="fields">${clientFields || '<div class="field"><span>Datos de contacto</span><strong>No registrados</strong></div>'}</div>
+      </article>
+    </section>`;
 
   let content;
   if (isContract) {
     const plan = relationOption(metadata, row, "id_plan");
     const address = relationOption(metadata, row, "id_direccion");
     content = `
-      <section><h2>Datos del cliente</h2><div class="grid">${clientFields}</div></section>
-      <section><h2>Servicio contratado</h2><div class="grid">
-        ${documentField("Plan", plan?.label)}
-        ${documentField("Velocidad", plan?.details?.velocidad)}
-        ${documentField("Valor mensual", plan?.details?.precio == null ? "" : documentMoney(plan.details.precio))}
-        ${documentField("Dirección del servicio", address?.label)}
-      </div></section>
-      <section><h2>Vigencia y estado</h2><div class="grid">
-        ${documentField("Fecha de inicio", documentDate(row.fecha_inicio))}
-        ${documentField("Fecha de finalización", documentDate(row.fecha_fin))}
-        ${documentField("Estado", row.estado)}
-        ${documentField("Motivo / observación", row.motivo_estado)}
-      </div></section>
-      <p class="note">Documento informativo generado a partir del registro del contrato en el sistema.</p>`;
+      ${partyDetails}
+      <section class="contract-summary">
+        <div class="section-heading"><span class="eyebrow">DETALLE DEL ACUERDO</span><h2>Servicio contratado</h2></div>
+        <div class="service-card">
+          <div class="service-name"><span>Plan</span><strong>${escapeHtml(plan?.label || "No especificado")}</strong></div>
+          <div class="service-facts">
+            ${documentField("Velocidad", plan?.details?.velocidad)}
+            ${documentField("Valor mensual", plan?.details?.precio == null ? "" : documentMoney(plan.details.precio))}
+            ${documentField("Dirección del servicio", address?.label)}
+          </div>
+        </div>
+      </section>
+      <section class="term-section">
+        <div class="section-heading"><span class="eyebrow">VIGENCIA</span><h2>Plazo y estado</h2></div>
+        <div class="term-grid">
+          ${documentField("Fecha de inicio", documentDate(row.fecha_inicio))}
+          ${documentField("Fecha de finalización", documentDate(row.fecha_fin))}
+          ${documentField("Estado del contrato", row.estado)}
+          ${documentField("Motivo / observación", row.motivo_estado)}
+        </div>
+      </section>
+      <section class="signatures" aria-label="Espacios de suscripción">
+        <div><span></span><strong>Global Conexit S.A.S.</strong><small>EL PRESTADOR</small></div>
+        <div><span></span><strong>${escapeHtml(clientName || "Cliente")}</strong><small>EL CLIENTE</small></div>
+      </section>
+      <p class="note">Resumen informativo generado a partir del registro del contrato en el sistema. Este documento no incluye firmas.</p>`;
   } else {
     const period = relationOption(metadata, row, "id_periodo");
     const planName = clientDetails?.plan_nombre;
     content = `
-      <section><h2>Datos del cliente</h2><div class="grid">${clientFields}</div></section>
-      <section><h2>Detalle de facturación</h2>
-        <div class="grid">
+      ${partyDetails}
+      <section class="invoice-details">
+        <div class="section-heading"><span class="eyebrow">RESUMEN DE FACTURACIÓN</span><h2>Detalle del servicio</h2></div>
+        <div class="invoice-meta">
           ${documentField("Contrato", `Contrato #${row.id_contrato}`)}
           ${documentField("Plan", planName)}
           ${documentField("Período facturado", period?.label)}
           ${documentField("Fecha de emisión", documentDate(row.fecha_emision))}
           ${documentField("Fecha de vencimiento", documentDate(row.fecha_vencimiento))}
-          ${documentField("Estado", row.estado)}
         </div>
-        <table><thead><tr><th>Concepto</th><th class="amount">Valor</th></tr></thead>
-          <tbody><tr><td>Servicio ${escapeHtml(planName || "contratado")}</td><td class="amount">${escapeHtml(documentMoney(row.total))}</td></tr></tbody>
-          <tfoot>
-            <tr><th>Total</th><th class="amount">${escapeHtml(documentMoney(row.total))}</th></tr>
-            <tr><td>Saldo pendiente</td><td class="amount">${escapeHtml(documentMoney(row.saldo))}</td></tr>
-          </tfoot>
+        <table>
+          <thead><tr><th>Descripción</th><th>Período</th><th class="amount">Valor</th></tr></thead>
+          <tbody><tr>
+            <td>Servicio de conectividad · ${escapeHtml(planName || "Plan contratado")}</td>
+            <td>${escapeHtml(period?.label || "—")}</td>
+            <td class="amount">${escapeHtml(documentMoney(row.total))}</td>
+          </tr></tbody>
         </table>
+        <div class="invoice-bottom">
+          <p class="invoice-note">El saldo pendiente refleja los pagos aplicados a esta factura al momento de su generación.</p>
+          <div class="totals">
+            <div><span>Total factura</span><strong>${escapeHtml(documentMoney(row.total))}</strong></div>
+            <div class="balance"><span>Saldo pendiente</span><strong>${escapeHtml(documentMoney(row.saldo))}</strong></div>
+          </div>
+        </div>
       </section>
-      <p class="note">Documento generado a partir de la factura registrada en el sistema. El saldo refleja los pagos aplicados al momento de la consulta.</p>`;
+      <p class="note">Documento informativo generado a partir de la factura registrada en el sistema.</p>`;
   }
 
   const generatedAt = new Intl.DateTimeFormat("es-CO", {
@@ -173,25 +210,76 @@ function buildRelatedDocument(entity, row, metadata) {
   return `<!doctype html>
     <html lang="es"><head><meta charset="utf-8"><title>${escapeHtml(reference)}</title>
       <style>
-        *{box-sizing:border-box}body{font:14px Arial,sans-serif;color:#252525;margin:0;padding:40px}
-        header{border-bottom:3px solid #e9650a;padding-bottom:18px;margin-bottom:28px}
-        .brand{color:#e9650a;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1px}
-        h1{font-size:25px;margin:8px 0}.reference{color:#555}
-        section{margin:24px 0}h2{font-size:16px;border-bottom:1px solid #ddd;padding-bottom:8px}
-        .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 28px}
-        .field span{display:block;color:#666;font-size:11px;text-transform:uppercase;margin-bottom:4px}
-        .field strong{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
-        table{width:100%;border-collapse:collapse;margin-top:20px}
-        th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}
-        thead{background:#f4f4f4}.amount{text-align:right}
-        tfoot th,tfoot td{border-bottom:0}.note{font-size:11px;color:#666;margin-top:30px}
-        footer{border-top:1px solid #ddd;color:#777;font-size:10px;margin-top:40px;padding-top:10px}
-        @media print{body{padding:12mm}section{break-inside:avoid}header{break-after:avoid}}
+        *{box-sizing:border-box}
+        body{max-width:900px;margin:28px auto;padding:36px;font:14px/1.5 Arial,sans-serif;color:#202b3c;background:#fff}
+        .document-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;border-bottom:3px solid #ef7410;padding-bottom:22px}
+        .brand-lockup{display:flex;align-items:center;gap:12px;min-width:190px}
+        .brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:#ef7410;color:#fff;font-size:15px;font-weight:800;letter-spacing:-1px}
+        .brand-name{display:block;color:#202b3c;font-size:13px;font-weight:800;letter-spacing:.08em}
+        .brand-tagline{display:block;color:#758094;font-size:10px;margin-top:2px}
+        .document-heading{flex:1}
+        .eyebrow{display:block;color:#e9650a;font-size:9px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+        h1{font-size:25px;line-height:1.2;margin:4px 0}
+        .reference{color:#596579;font-size:12px;font-weight:600}
+        .status{padding:7px 11px;border:1px solid #f3c49f;border-radius:20px;background:#fff7ef;color:#a84808;font-size:10px;font-weight:800;text-transform:uppercase;white-space:nowrap}
+        .party-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:24px 0}
+        .party-card{padding:17px 19px;border:1px solid #e5e9ef;border-radius:9px;background:#fbfcfe;break-inside:avoid}
+        .party-card h2{margin:5px 0 12px;font-size:15px}
+        .fields{display:grid;grid-template-columns:1fr 1fr;gap:11px 16px}
+        .field span{display:block;color:#758094;font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px}
+        .field strong{display:block;color:#283448;font-size:12px;font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere}
+        section{margin:25px 0}
+        .section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+        .section-heading h2{margin:2px 0 0;font-size:17px}
+        .invoice-meta,.term-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px 20px}
+        .invoice-meta{padding:15px 17px;border-radius:8px;background:#f4f6f9}
+        table{width:100%;border-collapse:collapse;margin-top:18px}
+        th,td{padding:12px 13px;border-bottom:1px solid #e5e9ef;text-align:left;vertical-align:top}
+        thead{background:#263449;color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+        tbody td{font-size:12px}
+        .amount{text-align:right;white-space:nowrap}
+        .invoice-bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-top:18px}
+        .invoice-note{max-width:330px;margin:0;color:#758094;font-size:10px}
+        .totals{width:min(100%,290px);border:1px solid #e5e9ef;border-radius:8px;overflow:hidden}
+        .totals>div{display:flex;justify-content:space-between;gap:20px;padding:10px 13px;font-size:12px}
+        .totals .balance{background:#fff5ec;color:#aa4c0a;font-size:13px}
+        .totals strong{white-space:nowrap}
+        .service-card{border:1px solid #e5e9ef;border-radius:9px;overflow:hidden}
+        .service-name{padding:15px 18px;background:#263449;color:#fff}
+        .service-name span{display:block;color:#c5ceda;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+        .service-name strong{display:block;margin-top:3px;font-size:16px}
+        .service-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;padding:17px 18px}
+        .term-grid{grid-template-columns:repeat(2,1fr);padding:16px 18px;border:1px solid #e5e9ef;border-radius:9px}
+        .signatures{display:grid;grid-template-columns:1fr 1fr;gap:54px;margin:56px 10px 20px;break-inside:avoid}
+        .signatures>div{text-align:center}
+        .signatures>div>span{display:block;height:35px;border-bottom:1px solid #8892a2;margin-bottom:8px}
+        .signatures strong,.signatures small{display:block}
+        .signatures strong{font-size:11px}
+        .signatures small{margin-top:2px;color:#758094;font-size:9px;letter-spacing:.08em}
+        .note{margin:24px 0 0;padding-top:11px;border-top:1px solid #e5e9ef;color:#758094;font-size:10px}
+        footer{display:flex;justify-content:space-between;gap:12px;margin-top:24px;padding-top:11px;border-top:1px solid #e5e9ef;color:#758094;font-size:9px}
+        @page{size:A4;margin:15mm}
+        @media print{
+          body{max-width:none;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+          .document-header{break-after:avoid}
+          section,.party-card,.service-card,table,.totals{break-inside:avoid}
+          thead{display:table-header-group}
+        }
+        @media screen and (max-width:650px){
+          body{margin:0;padding:20px}
+          .document-header{flex-wrap:wrap}
+          .party-grid,.invoice-meta,.service-facts,.term-grid{grid-template-columns:1fr 1fr}
+          .invoice-bottom{flex-direction:column}
+        }
       </style>
     </head><body>
-      <header><div class="brand">Global Conexit</div><h1>${escapeHtml(title)}</h1><div class="reference">${escapeHtml(reference)}</div></header>
+      <header class="document-header">
+        <div class="brand-lockup"><span class="brand-mark">GC</span><div><span class="brand-name">GLOBAL CONEXIT</span><span class="brand-tagline">Servicios de conectividad</span></div></div>
+        <div class="document-heading"><span class="eyebrow">${isContract ? "DOCUMENTO DE SERVICIO" : "COMPROBANTE DE COBRO"}</span><h1>${escapeHtml(title)}</h1><div class="reference">${escapeHtml(reference)}</div></div>
+        <span class="status">${escapeHtml(row.estado || "SIN ESTADO")}</span>
+      </header>
       ${content}
-      <footer>Generado el ${escapeHtml(generatedAt)} · Global Conexit</footer>
+      <footer><span>Generado el ${escapeHtml(generatedAt)}</span><span>Global Conexit S.A.S. · NIT 900.123.456-7</span></footer>
     </body></html>`;
 }
 

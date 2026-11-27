@@ -69,7 +69,7 @@ function formatDate(value) {
 }
 
 function facturaPendiente(factura) {
-	return ["PENDIENTE", "VENCIDA"].includes(factura.estado) && Number(factura.saldo) > 0;
+	return Boolean(factura) && ["PENDIENTE", "VENCIDA"].includes(factura.estado) && Number(factura.saldo) > 0;
 }
 
 function estadoFactura(factura) {

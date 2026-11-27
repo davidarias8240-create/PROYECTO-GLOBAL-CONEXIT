@@ -75,7 +75,7 @@ function SidebarIcon({ name, className = "" }) {
     );
 }
 
-function Sidebar() {
+function Sidebar({ isOpen, onNavigate }) {
     const navigate = useNavigate();
     const { pathname } = useLocation();
     const groupedKeys = new Set(sidebarGroups.flatMap(({ keys }) => keys));
@@ -111,13 +111,13 @@ function Sidebar() {
     };
 
     return (
-        <aside className="sidebar">
+        <aside id="admin-navigation-sidebar" className={`sidebar${isOpen ? " is-open" : ""}`}>
             <div className="sidebar-logo-wrap">
                 <img src={logo} alt="Global Conexit" className="sidebar-logo" />
             </div>
 
             <nav className="sidebar-navigation" aria-label="Navegación administrativa">
-                <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard">
+                <NavLink className="nav-link sidebar-dashboard-link" to="/dashboard" onClick={onNavigate}>
                     <SidebarIcon name="dashboard" className="sidebar-subcategory-icon" />
                     <span>Dashboard</span>
                 </NavLink>
@@ -144,7 +144,7 @@ function Sidebar() {
                         >
                             {entities.map(({ key, label: entityLabel }) => (
                                 <li className="nav-item" key={key}>
-                                    <NavLink className="nav-link" to={`/${key}`}>
+                                    <NavLink className="nav-link" to={`/${key}`} onClick={onNavigate}>
                                         <SidebarIcon name={entityIcons[key] ?? "archive"} className="sidebar-subcategory-icon" />
                                         <span>{entityLabel}</span>
                                     </NavLink>
@@ -156,7 +156,7 @@ function Sidebar() {
                 <section className="sidebar-group">
                     <ul className="nav nav-pills flex-column sidebar-subcategories">
                         <li className="nav-item">
-                            <NavLink className="nav-link" to="/desactivados">
+                            <NavLink className="nav-link" to="/desactivados" onClick={onNavigate}>
                                 <SidebarIcon name="history" className="sidebar-subcategory-icon" />
                                 <span>Desactivados</span>
                             </NavLink>
