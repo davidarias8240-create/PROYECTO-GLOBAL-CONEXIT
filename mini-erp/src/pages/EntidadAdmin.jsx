@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+<<<<<<< Updated upstream
 import { Link, useLocation, useNavigate } from "react-router-dom";
+=======
+import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
+import Stepper, { Step } from "../components/Stepper";
+>>>>>>> Stashed changes
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
@@ -11,7 +17,6 @@ import {
 import { sanitizeDocument, sanitizePhone, validateFieldSet, validateFieldValue } from "../utils/formValidation";
 
 const customerFields = [
-  { name: "numero_cliente", label: "Número de cliente", required: true, maxLength: 30 },
   {
     name: "tipo_documento",
     label: "Tipo de documento",
@@ -29,6 +34,49 @@ const addressFields = [
   { name: "departamento", label: "Departamento", required: true, maxLength: 100 },
   { name: "referencia", label: "Referencia o punto cercano", required: false, maxLength: 255 },
 ];
+
+const formStepOrder = [
+  ["identity", "Identificación"],
+  ["main", "Datos principales"],
+  ["relations", "Relaciones"],
+  ["details", "Información adicional"],
+  ["contact", "Contacto"],
+  ["schedule", "Fechas y valores"],
+  ["status", "Estado y configuración"],
+  ["access", "Acceso"],
+  ["address", "Dirección"],
+];
+
+const singularEntityNames = {
+  ajustes: "ajuste",
+  auditoria: "registro de auditoría",
+  clientes: "cliente",
+  contratos: "contrato",
+  direcciones: "dirección",
+  facturas: "factura",
+  interacciones: "interacción",
+  notificaciones: "notificación",
+  ordenes: "orden de servicio",
+  pagos: "pago",
+  periodos: "período",
+  planes: "plan",
+  roles: "rol",
+  solicitudes: "solicitud",
+  tickets: "ticket",
+  usuarios: "usuario",
+};
+
+function formStepKey(column) {
+  const name = column.name.toLocaleLowerCase("es");
+  if (/documento|^nit$/.test(name)) return "identity";
+  if (["direccion", "ciudad", "departamento", "referencia", "id_direccion"].includes(name)) return "address";
+  if (/correo|email|telefono|celular/.test(name)) return "contact";
+  if (/fecha|valor|saldo|total|precio|monto/.test(name)) return "schedule";
+  if (/estado|activo|prioridad/.test(name)) return "status";
+  if (name.startsWith("id_")) return "relations";
+  if (/nombre|asunto|descripcion|mensaje|tipo/.test(name)) return "main";
+  return "details";
+}
 
 function customerFieldColumn(field) {
   const maxLength = field.name === "nombres" ? 120 : field.maxLength || 30;
@@ -590,6 +638,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState(1);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [ticketStatus, setTicketStatus] = useState("");
@@ -602,6 +651,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const savingRef = useRef(false);
+  const formRef = useRef(null);
   const requestSequence = useRef(0);
   const lastClientSearch = useRef("");
   const relationRequestSequence = useRef(0);
@@ -683,6 +733,20 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     };
   }, [entity, showForm, values.id_cliente]);
 
+  useEffect(() => {
+    if (!showForm) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !saving) setShowForm(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showForm, saving]);
+
   const visibleColumns = useMemo(
     () => (metadata?.columnas || []).filter((column) =>
       !(entity === "clientes" && column.name === "id_usuario")
@@ -715,6 +779,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const formColumns = useMemo(
     () => visibleColumns.filter((column) =>
       column.name !== metadata.clave
+      && !(entity === "clientes" && column.name === "numero_cliente")
       && !(entity === "tickets" && ["estado", "fecha_cierre"].includes(column.name))
       && (!column.generated || (entity === "pagos" && column.name === "fecha"))
       && column.name !== "contrasena_hash"
@@ -738,6 +803,43 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     );
     return role?.label.toUpperCase().includes("CLIENTE") || false;
   }, [entity, metadata, values.id_rol]);
+
+  const activeFormColumns = editingId ? editFormColumns : createFormColumns;
+  const includeClientProfile = entity === "usuarios" && !editingId && isClientRole;
+  const includeAddressDetails = !editingId && (entity === "clientes" || includeClientProfile);
+  const formSteps = useMemo(() => {
+    const groups = new Map(formStepOrder.map(([key, title]) => [key, {
+      key,
+      title,
+      columns: [],
+      customerFields: [],
+      includePassword: false,
+      includeAddress: false,
+    }]));
+    const addToGroup = (key, property, item = true) => {
+      const group = groups.get(key);
+      if (property === "includePassword" || property === "includeAddress") {
+        group[property] = true;
+      } else {
+        group[property].push(item);
+      }
+    };
+    for (const column of activeFormColumns) {
+      addToGroup(formStepKey(column), "columns", column);
+    }
+    if (includeClientProfile) {
+      for (const field of customerFields) {
+        addToGroup(formStepKey({ name: field.name }), "customerFields", field);
+      }
+    }
+    if (entity === "usuarios" || (entity === "clientes" && !editingId)) {
+      addToGroup("access", "includePassword");
+    }
+    if (includeAddressDetails) addToGroup("address", "includeAddress");
+    return formStepOrder
+      .map(([key]) => groups.get(key))
+      .filter((group) => group.columns.length || group.customerFields.length || group.includePassword || group.includeAddress);
+  }, [activeFormColumns, editingId, entity, includeAddressDetails, includeClientProfile]);
 
   const visibleRows = useMemo(() => {
     if (entity === "clientes" && search.trim()) return rows;
@@ -845,6 +947,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   const startCreate = (overrides = null) => {
     setNotice("");
+    setError("");
+    setFormStep(1);
     paymentIdempotencyKey.current = entity === "pagos" ? createIdempotencyKey() : null;
     const initialValues = Object.fromEntries(createFormColumns.map((column) => [
       column.name,
@@ -1069,6 +1173,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
 
   const startEdit = (row) => {
     setNotice("");
+    setError("");
+    setFormStep(1);
     paymentIdempotencyKey.current = null;
     setEditingId(row[metadata.clave]);
     setValues(Object.fromEntries(editFormColumns.map((column) => [
@@ -1106,8 +1212,26 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
         if (error) errors[`cliente.${field.name}`] = error;
       }
     }
+    if (((entity === "clientes" || entity === "usuarios") && !editingId) || (editingId && password)) {
+      if (password.length < 8) {
+        errors.password = "La contraseña debe tener al menos 8 caracteres.";
+      }
+    }
     setFieldErrors(errors);
-    if (Object.keys(errors).length > 0) return;
+    if (Object.keys(errors).length > 0) {
+      const firstInvalidStep = formSteps.findIndex((group) =>
+        Object.keys(errors).some((fieldName) =>
+          group.columns.some((column) => column.name === fieldName)
+          || (group.key === "identity" && fieldName.startsWith("cliente.") && fieldName.includes("documento"))
+          || (group.key === "main" && fieldName === "cliente.nombres")
+          || (group.key === "contact" && fieldName === "cliente.telefono")
+          || (group.key === "access" && fieldName === "password")
+          || (group.key === "address" && fieldName.startsWith("direccion."))
+        )
+      );
+      if (firstInvalidStep >= 0) setFormStep(firstInvalidStep + 1);
+      return;
+    }
     savingRef.current = true;
     setSaving(true);
     setError("");
@@ -1463,6 +1587,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const canManageRecords = canCreateRecords || canEditRecords;
   const canOpenCustomer = entity === "clientes" && Boolean(metadata?.permisos?.leer) && !customerId;
   const hasRowActions = canManageRecords || canOpenCustomer || canDownloadDocument;
+  const formEntityLabel = singularEntityNames[entity] || "registro";
   const downloadDocument = (row) => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -1479,6 +1604,147 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
       printWindow.print();
     }, 250);
   };
+
+  const renderEntityField = (column) => {
+    let fieldColumn = column;
+    if (entity === "ordenes" && editingId && column.name === "estado"
+      && Array.isArray(metadata.permisos?.campos_edicion)) {
+      const currentOrder = rows.find((row) =>
+        String(row[metadata.clave]) === String(editingId)
+      );
+      if (currentOrder) {
+        fieldColumn = {
+          ...column,
+          enum: technicianOrderStatuses(currentOrder.estado, Boolean(currentOrder.fecha_programada)),
+        };
+      }
+    }
+    if (entity === "ordenes" && column.name === "id_direccion" && values.id_contrato) {
+      const contract = metadata.columnas
+        .find((item) => item.name === "id_contrato")
+        ?.options?.find((option) => String(option.value) === String(values.id_contrato));
+      if (contract?.details?.cliente_id) {
+        fieldColumn = {
+          ...column,
+          options: column.options.filter((option) =>
+            String(option.details?.cliente_id) === String(contract.details.cliente_id)
+          ),
+        };
+      }
+    }
+    return (
+      <EntityField
+        key={column.name}
+        entity={entity}
+        column={fieldColumn}
+        value={values[column.name] ?? ""}
+        values={values}
+        error={fieldErrors[column.name]}
+        onChange={(value) => handleFieldChange(column, value)}
+        onBlur={() => handleFieldBlur(column)}
+        disabled={Boolean(
+          (customerId
+            && (column.name === "id_cliente"
+              || (entity === "notificaciones" && column.name === "id_usuario")))
+          || (entity === "ordenes"
+            && editingId
+            && Array.isArray(metadata.permisos?.campos_edicion)
+            && ["CERRADA", "CANCELADA"].includes(
+              rows.find((row) => String(row[metadata.clave]) === String(editingId))?.estado
+            ))
+        )}
+        requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
+      />
+    );
+  };
+
+  const renderCustomerField = (field) => (
+    <label className="admin-entity-field" key={field.name}>
+      <span>{field.label}{field.required ? " *" : ""}</span>
+      {field.options ? (
+        <select
+          className="form-select"
+          value={customer[field.name] || ""}
+          onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
+          onBlur={() => {
+            const validationError = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
+              entity: "clientes",
+              values: customer,
+              required: field.required,
+            });
+            setFieldErrors((current) => {
+              const next = { ...current };
+              if (validationError) next[`cliente.${field.name}`] = validationError;
+              else delete next[`cliente.${field.name}`];
+              return next;
+            });
+          }}
+          required={field.required}
+          aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
+        >
+          <option value="">Selecciona...</option>
+          {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      ) : (
+        <input
+          className={`form-control${fieldErrors[`cliente.${field.name}`] ? " is-invalid" : ""}`}
+          type={field.name === "telefono" ? "tel" : "text"}
+          inputMode={["telefono", "numero_documento"].includes(field.name) ? "numeric" : undefined}
+          value={customer[field.name] || ""}
+          maxLength={field.name === "telefono" ? 10 : field.maxLength}
+          required={field.required}
+          aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
+          onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
+          onBlur={() => {
+            const validationError = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
+              entity: "clientes",
+              values: customer,
+              required: field.required,
+            });
+            setFieldErrors((current) => {
+              const next = { ...current };
+              if (validationError) next[`cliente.${field.name}`] = validationError;
+              else delete next[`cliente.${field.name}`];
+              return next;
+            });
+          }}
+        />
+      )}
+      {fieldErrors[`cliente.${field.name}`] && (
+        <small className="text-danger d-block" role="alert">{fieldErrors[`cliente.${field.name}`]}</small>
+      )}
+    </label>
+  );
+
+  const renderAddressField = (field) => (
+    <label className="admin-entity-field" key={field.name}>
+      <span>{field.label}{field.required ? " *" : ""}</span>
+      <input
+        className={`form-control${fieldErrors[`direccion.${field.name}`] ? " is-invalid" : ""}`}
+        type="text"
+        value={address[field.name] || ""}
+        maxLength={field.maxLength}
+        required={field.required}
+        aria-invalid={Boolean(fieldErrors[`direccion.${field.name}`])}
+        onChange={(event) => {
+          const value = event.target.value;
+          setAddress((current) => ({ ...current, [field.name]: value }));
+          setFieldErrors((current) => {
+            const next = { ...current };
+            if (field.required && !value.trim()) {
+              next[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
+            } else {
+              delete next[`direccion.${field.name}`];
+            }
+            return next;
+          });
+        }}
+      />
+      {fieldErrors[`direccion.${field.name}`] && (
+        <small className="text-danger d-block" role="alert">{fieldErrors[`direccion.${field.name}`]}</small>
+      )}
+    </label>
+  );
 
   if (loading && !metadata) return <p role="status">Cargando {entity}...</p>;
 
@@ -1601,237 +1867,138 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
         </section>
       )}
 
-      {showForm && (
-        <form className="dashboard-card admin-entity-form mb-4" onSubmit={handleSave}>
-          <div className="d-flex justify-content-between align-items-center gap-2 mb-3">
-            <h3 className="h5 mb-0">
-              {editingId ? "Editar registro" : `Crear ${entity === "clientes" ? "cliente" : entity === "usuarios" ? "usuario" : "registro"}`}
-            </h3>
-            <button type="button" className="btn-close" aria-label="Cerrar" onClick={closeForm} />
-          </div>
-          {entity === "clientes" && !editingId && (
-            /* El backend crea la cuenta vinculada con rol CLIENTE usando el correo y la contraseña ingresados. */
-            <p className="text-muted">Se creará una cuenta de usuario activa con el rol CLIENTE y los datos de acceso indicados abajo.</p>
-          )}
-          <div className="admin-entity-fields">
-            {(editingId ? editFormColumns : createFormColumns).map((column) => (
-              (() => {
-                let fieldColumn = column;
-                if (entity === "ordenes" && editingId && column.name === "estado"
-                  && Array.isArray(metadata.permisos?.campos_edicion)) {
-                  const currentOrder = rows.find((row) =>
-                    String(row[metadata.clave]) === String(editingId)
-                  );
-                  if (currentOrder) {
-                    fieldColumn = {
-                      ...column,
-                      enum: technicianOrderStatuses(
-                        currentOrder.estado,
-                        Boolean(currentOrder.fecha_programada)
-                      ),
-                    };
-                  }
-                }
-                if (entity === "ordenes" && column.name === "id_direccion" && values.id_contrato) {
-                  const contract = metadata.columnas
-                    .find((item) => item.name === "id_contrato")
-                    ?.options?.find((option) => String(option.value) === String(values.id_contrato));
-                  if (contract?.details?.cliente_id) {
-                    fieldColumn = {
-                      ...column,
-                      options: column.options.filter((option) =>
-                        String(option.details?.cliente_id) === String(contract.details.cliente_id)
-                      ),
-                    };
-                  }
-                }
-                return (
-                  <EntityField
-                    key={column.name}
-                    entity={entity}
-                    column={fieldColumn}
-                    value={values[column.name] ?? ""}
-                    values={values}
-                    error={fieldErrors[column.name]}
-                    onChange={(value) => handleFieldChange(column, value)}
-                    onBlur={() => handleFieldBlur(column)}
-                    disabled={Boolean(
-                      (customerId
-                        && (column.name === "id_cliente"
-                          || (entity === "notificaciones" && column.name === "id_usuario")))
-                      || (entity === "ordenes"
-                        && editingId
-                        && Array.isArray(metadata.permisos?.campos_edicion)
-                        && ["CERRADA", "CANCELADA"].includes(
-                          rows.find((row) => String(row[metadata.clave]) === String(editingId))?.estado
-                        ))
-                    )}
-                    requiredOverride={entity === "clientes" && column.name === "correo" && !editingId ? true : undefined}
-                  />
-                );
-              })()
-            ))}
-            {(entity === "usuarios" || (entity === "clientes" && !editingId)) && (
-              <label className="admin-entity-field">
-                <span>
-                  {editingId ? "Nueva contraseña (opcional, mínimo 8 caracteres)" : "Contraseña (mínimo 8 caracteres)"}
-                  {editingId ? "" : " *"}
-                </span>
-                <input
-                  className="form-control"
-                  type="password"
-                  autoComplete="new-password"
-                  minLength={8}
-                  required={!editingId}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-              </label>
-            )}
-          </div>
-          {entity === "clientes" && !editingId && (
-            <>
-              <h4 className="h6 mt-4">Dirección del cliente</h4>
-              <div className="admin-entity-fields">
-                {addressFields.map((field) => (
-                  <label className="admin-entity-field" key={field.name}>
-                    <span>{field.label}{field.required ? " *" : ""}</span>
-                    <input
-                      className={`form-control${fieldErrors[`direccion.${field.name}`] ? " is-invalid" : ""}`}
-                      type="text"
-                      value={address[field.name] || ""}
-                      maxLength={field.maxLength}
-                      required={field.required}
-                      aria-invalid={Boolean(fieldErrors[`direccion.${field.name}`])}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setAddress((current) => ({ ...current, [field.name]: value }));
-                        setFieldErrors((current) => {
-                          const next = { ...current };
-                          if (field.required && !value.trim()) {
-                            next[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
-                          } else {
-                            delete next[`direccion.${field.name}`];
-                          }
-                          return next;
-                        });
-                      }}
-                    />
-                    {fieldErrors[`direccion.${field.name}`] && (
-                      <small className="text-danger d-block" role="alert">
-                        {fieldErrors[`direccion.${field.name}`]}
-                      </small>
-                    )}
-                  </label>
-                ))}
+      {showForm && typeof document !== "undefined" && createPortal(
+        <div
+          className="admin-form-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !saving) closeForm();
+          }}
+        >
+          <section
+            className="admin-form-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-form-title"
+          >
+            <form ref={formRef} onSubmit={handleSave}>
+              <header className="admin-form-modal__header">
+                <div>
+                  <p className="admin-form-modal__eyebrow">{editingId ? "Edición" : "Nuevo registro"}</p>
+                  <h3 id="admin-form-title">
+                    {editingId ? `Editar ${formEntityLabel}` : `Crear ${formEntityLabel}`}
+                  </h3>
+                  {entity === "clientes" && !editingId && (
+                    <p className="text-muted mb-0">
+                      El número de cliente se asignará automáticamente al guardar.
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="admin-form-modal__close"
+                  aria-label="Cerrar formulario"
+                  onClick={closeForm}
+                  disabled={saving}
+                >
+                  ×
+                </button>
+              </header>
+              {error && <p className="alert alert-danger mx-4 mt-3 mb-0" role="alert">{error}</p>}
+              <div className="admin-form-modal__body">
+                <Stepper
+                  key={`${entity}-${editingId || "new"}`}
+                  step={formStep}
+                  onStepChange={setFormStep}
+                  linear
+                  accentColor="#e9650a"
+                  backButtonText="Volver"
+                  nextButtonText="Siguiente"
+                  completeButtonText={saving ? "Guardando..." : "Guardar"}
+                  backButtonProps={{ disabled: saving }}
+                  nextButtonProps={{
+                    disabled: saving,
+                    onClick: (event) => {
+                      if (!formRef.current?.reportValidity()) {
+                        event.preventDefault();
+                        return;
+                      }
+                      if (formStep === formSteps.length) {
+                        event.preventDefault();
+                        formRef.current?.requestSubmit();
+                      }
+                    },
+                  }}
+                >
+                  {formSteps.map((group) => (
+                    <Step key={group.key} title={group.title}>
+                      {group.key === "access" && entity === "clientes" && !editingId && (
+                        <p className="text-muted mb-3">
+                          Se creará una cuenta de acceso activa para el cliente.
+                        </p>
+                      )}
+                      {group.key === "identity" && includeClientProfile && (
+                        <p className="text-muted mb-3">Datos de identificación del perfil cliente.</p>
+                      )}
+                      {group.key === "address" && includeAddressDetails && (
+                        <p className="text-muted mb-3">La dirección se registrará en la tabla de direcciones.</p>
+                      )}
+                      <div className="admin-entity-fields">
+                        {group.columns.map(renderEntityField)}
+                        {group.customerFields.map(renderCustomerField)}
+                        {group.includePassword && (
+                          <label className="admin-entity-field admin-entity-field--wide">
+                            <span>
+                              {editingId
+                                ? "Nueva contraseña (opcional, mínimo 8 caracteres)"
+                                : "Contraseña (mínimo 8 caracteres)"}{editingId ? "" : " *"}
+                            </span>
+                            <input
+                              className={`form-control${fieldErrors.password ? " is-invalid" : ""}`}
+                              type="password"
+                              autoComplete="new-password"
+                              minLength={8}
+                              required={!editingId}
+                              value={password}
+                              onChange={(event) => {
+                                const nextPassword = event.target.value;
+                                setPassword(nextPassword);
+                                setFieldErrors((current) => {
+                                  const next = { ...current };
+                                  if (nextPassword.length < 8 && (nextPassword || !editingId)) {
+                                    next.password = "La contraseña debe tener al menos 8 caracteres.";
+                                  } else {
+                                    delete next.password;
+                                  }
+                                  return next;
+                                });
+                              }}
+                              aria-invalid={Boolean(fieldErrors.password)}
+                            />
+                            {fieldErrors.password && (
+                              <small className="text-danger" role="alert">{fieldErrors.password}</small>
+                            )}
+                          </label>
+                        )}
+                        {group.includeAddress && addressFields.map(renderAddressField)}
+                      </div>
+                    </Step>
+                  ))}
+                </Stepper>
               </div>
-            </>
-          )}
-          {entity === "usuarios" && isClientRole && !editingId && (
-            <>
-              <h4 className="h6 mt-4">Datos del perfil cliente</h4>
-              <div className="admin-entity-fields">
-                {customerFields.map((field) => (
-                  <label className="admin-entity-field" key={field.name}>
-                    <span>{field.label}{field.required ? " *" : ""}</span>
-                    {field.options ? (
-                      <select
-                        className="form-select"
-                        value={customer[field.name] || ""}
-                        onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
-                        onBlur={() => {
-                          const error = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
-                            entity: "clientes",
-                            values: customer,
-                            required: field.required,
-                          });
-                          setFieldErrors((current) => {
-                            const next = { ...current };
-                            if (error) next[`cliente.${field.name}`] = error;
-                            else delete next[`cliente.${field.name}`];
-                            return next;
-                          });
-                        }}
-                        required={field.required}
-                        aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
-                      >
-                        <option value="">Selecciona...</option>
-                        {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
-                      </select>
-                    ) : (
-                      <input
-                        className={`form-control${fieldErrors[`cliente.${field.name}`] ? " is-invalid" : ""}`}
-                        type={field.name === "telefono" ? "tel" : "text"}
-                        inputMode={["telefono", "numero_documento"].includes(field.name) ? "numeric" : undefined}
-                        value={customer[field.name] || ""}
-                        maxLength={field.name === "telefono" ? 10 : field.maxLength}
-                        required={field.required}
-                        aria-invalid={Boolean(fieldErrors[`cliente.${field.name}`])}
-                        onChange={(event) => handleCustomerFieldChange(field, event.target.value)}
-                        onBlur={() => {
-                          const error = validateFieldValue(customerFieldColumn(field), customer[field.name] || "", {
-                            entity: "clientes",
-                            values: customer,
-                            required: field.required,
-                          });
-                          setFieldErrors((current) => {
-                            const next = { ...current };
-                            if (error) next[`cliente.${field.name}`] = error;
-                            else delete next[`cliente.${field.name}`];
-                            return next;
-                          });
-                        }}
-                      />
-                    )}
-                    {fieldErrors[`cliente.${field.name}`] && (
-                      <small className="text-danger d-block" role="alert">{fieldErrors[`cliente.${field.name}`]}</small>
-                    )}
-                  </label>
-                ))}
-              </div>
-              <h4 className="h6 mt-4">Dirección del cliente</h4>
-              <div className="admin-entity-fields">
-                {addressFields.map((field) => (
-                  <label className="admin-entity-field" key={field.name}>
-                    <span>{field.label}{field.required ? " *" : ""}</span>
-                    <input
-                      className={`form-control${fieldErrors[`direccion.${field.name}`] ? " is-invalid" : ""}`}
-                      type="text"
-                      value={address[field.name] || ""}
-                      maxLength={field.maxLength}
-                      required={field.required}
-                      aria-invalid={Boolean(fieldErrors[`direccion.${field.name}`])}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        setAddress((current) => ({ ...current, [field.name]: value }));
-                        setFieldErrors((current) => {
-                          const next = { ...current };
-                          if (field.required && !value.trim()) {
-                            next[`direccion.${field.name}`] = `Completa el campo ${field.label}.`;
-                          } else {
-                            delete next[`direccion.${field.name}`];
-                          }
-                          return next;
-                        });
-                      }}
-                    />
-                    {fieldErrors[`direccion.${field.name}`] && (
-                      <small className="text-danger d-block" role="alert">
-                        {fieldErrors[`direccion.${field.name}`]}
-                      </small>
-                    )}
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-          <div className="d-flex gap-2 mt-4">
-            <button className="btn btn-success" type="submit" disabled={saving}>
-              {saving ? "Guardando..." : "Guardar"}
-            </button>
-            <button className="btn btn-outline-secondary" type="button" onClick={closeForm}>Cancelar</button>
-          </div>
-        </form>
+              <footer className="admin-form-modal__footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={closeForm}
+                  disabled={saving}
+                >
+                  Cancelar
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>,
+        document.body
       )}
 
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
