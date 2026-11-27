@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-<<<<<<< Updated upstream
 import { Link, useLocation, useNavigate } from "react-router-dom";
-=======
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
 import Stepper, { Step } from "../components/Stepper";
->>>>>>> Stashed changes
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
@@ -945,7 +941,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     }
   };
 
-  const startCreate = (overrides = null) => {
+  const startCreate = useCallback((overrides = null) => {
     setNotice("");
     setError("");
     setFormStep(1);
@@ -977,7 +973,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     setPassword("");
     setEditingId(null);
     setShowForm(true);
-  };
+  }, [createFormColumns, customerId, customerUserId, entity]);
 
   useEffect(() => {
     const solicitud = location.state?.solicitud;
@@ -1015,7 +1011,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     if (addressOption) overrides.id_direccion = addressOption.value;
     startCreate(overrides);
     navigate(location.pathname, { replace: true, state: null });
-  }, [entity, location, metadata, navigate]);
+  }, [entity, location, metadata, navigate, startCreate]);
 
   const handleFieldChange = (column, value) => {
     setValues((current) => {
