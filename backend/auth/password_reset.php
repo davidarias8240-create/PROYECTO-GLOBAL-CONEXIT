@@ -269,7 +269,10 @@ function passwordResetHandleRequest(string $role): void
         if ($pdo->inTransaction()) {
             $pdo->rollBack();
         }
-        error_log("Error interno procesando una solicitud de recuperación de contraseña.");
+        error_log(
+            "Error interno procesando una solicitud de recuperación de contraseña: " .
+            get_class($exception) . ": " . $exception->getMessage()
+        );
         passwordResetRespond(500, ["error" => "No se pudo procesar la solicitud"]);
     }
 
