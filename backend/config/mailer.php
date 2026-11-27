@@ -100,7 +100,7 @@ function crearMailer(): PHPMailer
     }
     $mailer->Host = $host;
     $mailer->SMTPAuth = $encryption !== "none";
-    $mailer->SMTPAutoTLS = $encryption !== "none";
+    $mailer->SMTPAutoTLS = $encryption === "tls";
     $mailer->Username = (string) ($config["username"] ?? "");
     $password = (string) ($config["password"] ?? "");
     if (strcasecmp($mailer->Host, "smtp.gmail.com") === 0) {
@@ -113,6 +113,11 @@ function crearMailer(): PHPMailer
         default => "",
     };
     $mailer->Port = $port;
+    $timeout = filter_var($config["timeout"] ?? 15, FILTER_VALIDATE_INT);
+    if ($timeout === false || $timeout < 1) {
+        throw new RuntimeException("El tiempo de espera SMTP configurado no es válido.");
+    }
+    $mailer->Timeout = $timeout;
     $mailer->CharSet = PHPMailer::CHARSET_UTF8;
     $fromEmail = trim((string) ($config["from_email"] ?? ""));
     if ($fromEmail === "") {
