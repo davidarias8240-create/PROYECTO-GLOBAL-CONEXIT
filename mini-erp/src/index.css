@@ -1106,7 +1106,7 @@ main > * {
 .plan-checkout-header p { margin: 0; color: #ed6d08; font-size: 18px; }
 .plan-checkout-header p span { font-size: 15px; }
 .plan-checkout-close { flex: 0 0 48px; width: 48px; height: 48px; border: 0; border-radius: 50%; background: #f4f0e8; color: #625b54; font-size: 28px; cursor: pointer; }
-.plan-checkout-body { overflow-y: auto; padding: 27px 40px 32px; }
+.plan-checkout-body { min-height: 0; overflow-y: auto; padding: 27px 40px 32px; }
 .plan-checkout-intro { margin: 0 0 20px; color: #706963; font-size: 16px; line-height: 1.55; }
 .checkout-field { display: block; min-width: 0; margin: 0 0 18px; color: #625c56; font-size: 13px; font-weight: 800; text-transform: uppercase; }
 .checkout-field input, .checkout-field select { width: 100%; height: 56px; margin-top: 8px; padding: 0 18px; border: 1px solid #e1d7c8; border-radius: 15px; outline: none; background: transparent; color: #242321; font: 400 16px "Inter", Arial, sans-serif; text-transform: none; }
@@ -1884,3 +1884,29 @@ main > * {
 }
 
 .portal-card button:hover { text-decoration: underline; }
+
+@media (max-width: 768px) {
+  .plan-checkout-backdrop { padding: 12px; }
+  .plan-checkout {
+    width: min(520px, calc(100vw - 24px));
+    max-height: min(700px, calc(100vh - 24px));
+    max-height: min(700px, calc(100dvh - 24px));
+    border-radius: 20px;
+  }
+  .plan-checkout-header { min-height: 82px; gap: 12px; padding: 14px 18px; }
+  .plan-checkout-header h2 { margin-bottom: 4px; font-size: 20px; }
+  .plan-checkout-header p { font-size: 16px; }
+  .plan-checkout-close { flex-basis: 40px; width: 40px; height: 40px; font-size: 24px; }
+  .plan-checkout-body { padding: 18px 20px 22px; }
+  .plan-checkout-intro { margin-bottom: 16px; font-size: 14px; }
+  .checkout-field { margin-bottom: 14px; font-size: 12px; }
+  .checkout-field input, .checkout-field select { height: 48px; margin-top: 6px; padding: 0 13px; border-radius: 12px; font-size: 16px; }
+  .checkout-fields-row { gap: 10px; }
+  .checkout-consent { gap: 8px; font-size: 12px; }
+  .checkout-submit { min-height: 48px; }
+  .checkout-confirmation-step { padding-top: 24px; }
+}
+
+@media (max-width: 390px) {
+  .checkout-fields-row { grid-template-columns: 1fr; gap: 0; }
+}
