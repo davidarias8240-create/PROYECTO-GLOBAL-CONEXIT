@@ -9,4 +9,5 @@ return [
     "from_email" => "globalconexit2@gmail.com",
     "from_name" => "Global Conexit",
     "notification_email" => "globalconexit2@gmail.com",
+    "password_reset_base_url" => "https://tu-dominio-real.com",
 ];
