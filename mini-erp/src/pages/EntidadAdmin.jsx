@@ -6,6 +6,8 @@ import { confirmAction, showErrorAlert, showSuccessAlert } from "../utils/alerts
 import {
   desactivarRegistroEntidad,
   guardarRegistroEntidad,
+  obtenerCiclosFacturacion,
+  obtenerOCrearPeriodoFacturacion,
   obtenerDetalleCliente,
   obtenerMetadatosEntidad,
   obtenerRegistrosEntidad,
@@ -257,7 +259,12 @@ function buildRelatedDocument(entity, row, metadata) {
       <p class="note">Resumen informativo generado a partir del registro del contrato en el sistema. Este documento no incluye firmas.</p>`;
   } else {
     const period = relationOption(metadata, row, "id_periodo");
+    const servicePeriodLabel = row.fecha_servicio_inicio && row.fecha_servicio_fin
+      ? `${documentDate(row.fecha_servicio_inicio)} – ${documentDate(row.fecha_servicio_fin)}`
+      : period?.label;
     const planName = clientDetails?.plan_nombre;
+    const invoiceDescription = row.descripcion
+      || `Servicio de conectividad · ${planName || "Plan contratado"}`;
     content = `
       ${partyDetails}
       <section class="invoice-details">
@@ -265,15 +272,15 @@ function buildRelatedDocument(entity, row, metadata) {
         <div class="invoice-meta">
           ${documentField("Contrato", `Contrato #${row.id_contrato}`)}
           ${documentField("Plan", planName)}
-          ${documentField("Período facturado", period?.label)}
+          ${documentField("Período facturado", servicePeriodLabel)}
           ${documentField("Fecha de emisión", documentDate(row.fecha_emision))}
           ${documentField("Fecha de vencimiento", documentDate(row.fecha_vencimiento))}
         </div>
         <table>
           <thead><tr><th>Descripción</th><th>Período</th><th class="amount">Valor</th></tr></thead>
           <tbody><tr>
-            <td>Servicio de conectividad · ${escapeHtml(planName || "Plan contratado")}</td>
-            <td>${escapeHtml(period?.label || "—")}</td>
+            <td>${escapeHtml(invoiceDescription)}</td>
+            <td>${escapeHtml(servicePeriodLabel || "—")}</td>
             <td class="amount">${escapeHtml(documentMoney(row.total))}</td>
           </tr></tbody>
         </table>
@@ -419,6 +426,13 @@ function currentBusinessDateTime() {
   const { year, month, day } = currentBusinessDate();
   const { hour, minute } = currentBusinessTime();
   return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function addDaysToDate(value, days) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!match || !Number.isInteger(Number(days)) || Number(days) < 1) return "";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + Number(days)));
+  return date.toISOString().slice(0, 10);
 }
 
 function createIdempotencyKey() {
@@ -645,6 +659,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   const [loading, setLoading] = useState(true);
   const [loadingCustomerDetail, setLoadingCustomerDetail] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [billingCycles, setBillingCycles] = useState([]);
+  const [billingCycleId, setBillingCycleId] = useState("");
+  const [billingMonth, setBillingMonth] = useState("");
+  const [loadingBillingCycles, setLoadingBillingCycles] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const savingRef = useRef(false);
@@ -731,6 +749,42 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   }, [entity, showForm, values.id_cliente]);
 
   useEffect(() => {
+    if (!showForm || entity !== "facturas" || editingId) return undefined;
+    let cancelled = false;
+    setLoadingBillingCycles(true);
+    obtenerCiclosFacturacion(true)
+      .then(({ ciclos }) => {
+        if (cancelled) return;
+        setBillingCycles(ciclos);
+        setBillingCycleId((current) =>
+          ciclos.some((cycle) => String(cycle.id_ciclo) === String(current))
+            ? current
+            : String(ciclos[0]?.id_ciclo || "")
+        );
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingBillingCycles(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId, entity, showForm]);
+
+  useEffect(() => {
+    if (!showForm || entity !== "facturas" || editingId || !billingCycleId) return;
+    const cycle = billingCycles.find((item) => String(item.id_ciclo) === String(billingCycleId));
+    const fechaVencimiento = cycle
+      ? addDaysToDate(values.fecha_emision, Number(cycle.dias_vencimiento))
+      : "";
+    if (fechaVencimiento && fechaVencimiento !== values.fecha_vencimiento) {
+      setValues((current) => ({ ...current, fecha_vencimiento: fechaVencimiento }));
+    }
+  }, [billingCycleId, billingCycles, editingId, entity, showForm, values.fecha_emision, values.fecha_vencimiento]);
+
+  useEffect(() => {
     if (!showForm) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -784,8 +838,11 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     [entity, metadata, visibleColumns]
   );
   const createFormColumns = useMemo(
-    () => formColumns.filter((column) => column.creatable !== false),
-    [formColumns]
+    () => formColumns.filter((column) =>
+      column.creatable !== false
+      && !(entity === "facturas" && column.name === "id_periodo")
+    ),
+    [entity, formColumns]
   );
   const editFormColumns = useMemo(
     () => formColumns.filter((column) => column.editable !== false),
@@ -802,6 +859,10 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   }, [entity, metadata, values.id_rol]);
 
   const activeFormColumns = editingId ? editFormColumns : createFormColumns;
+  const selectedBillingCycle = useMemo(
+    () => billingCycles.find((cycle) => String(cycle.id_ciclo) === String(billingCycleId)),
+    [billingCycleId, billingCycles],
+  );
   const includeClientProfile = entity === "usuarios" && !editingId && isClientRole;
   const includeAddressDetails = !editingId && (entity === "clientes" || includeClientProfile);
   const formSteps = useMemo(() => {
@@ -966,6 +1027,8 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     if (entity === "facturas" && Object.hasOwn(initialValues, "fecha_emision")) {
       const { year, month, day } = currentBusinessDate();
       initialValues.fecha_emision = `${year}-${month}-${day}`;
+      setBillingMonth(`${year}-${month}`);
+      setBillingCycleId("");
     }
     if (customerId && Object.hasOwn(initialValues, "id_cliente")) {
       initialValues.id_cliente = customerId;
@@ -1194,7 +1257,21 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
     event.preventDefault();
     if (savingRef.current) return;
     const activeFormColumns = editingId ? editFormColumns : createFormColumns;
-    const errors = validateFieldSet(activeFormColumns, values, entity);
+    if (entity === "facturas" && !editingId && (!selectedBillingCycle || !/^\d{4}-\d{2}$/.test(billingMonth))) {
+      setError("Selecciona un ciclo activo, un mes y un año para la factura.");
+      return;
+    }
+    const cycleForInvoice = selectedBillingCycle;
+    const validationValues = entity === "facturas" && !editingId && cycleForInvoice
+      ? {
+          ...values,
+          fecha_vencimiento: addDaysToDate(
+            values.fecha_emision,
+            Number(cycleForInvoice.dias_vencimiento)
+          ),
+        }
+      : values;
+    const errors = validateFieldSet(activeFormColumns, validationValues, entity);
     if ((entity === "clientes" && !editingId) || (entity === "usuarios" && !editingId && isClientRole)) {
       for (const field of addressFields) {
         if (field.required && !address[field.name]?.trim()) {
@@ -1278,6 +1355,18 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
           payload.cliente = customer;
           payload.direccion = address;
         }
+      }
+
+      if (entity === "facturas" && !editingId) {
+        const [year, month] = billingMonth.split("-").map(Number);
+        const result = await obtenerOCrearPeriodoFacturacion(
+          billingCycleId,
+          year,
+          month,
+          values.fecha_emision
+        );
+        payload.datos.id_periodo = result.periodo.id_periodo;
+        payload.datos.fecha_vencimiento = result.fecha_vencimiento_sugerida;
       }
 
       await guardarRegistroEntidad(entity, payload, editingId, customerId);
@@ -1596,7 +1685,7 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
   };
 
   const canDownloadDocument = ["contratos", "facturas"].includes(entity);
-  const canCreateRecords = Boolean(metadata?.permisos?.crear) && !contextReadOnly;
+  const canCreateRecords = Boolean(metadata?.permisos?.crear) && !contextReadOnly && entity !== "facturas";
   const canEditRecords = Boolean(metadata?.permisos?.editar) && !contextReadOnly;
   const canManageRecords = canCreateRecords || canEditRecords;
   const canOpenCustomer = entity === "clientes" && Boolean(metadata?.permisos?.leer) && !customerId;
@@ -1919,6 +2008,47 @@ function EntityAdmin({ entity, customerId = null, customerUserId = null }) {
               </header>
               {error && <p className="alert alert-danger mx-4 mt-3 mb-0" role="alert">{error}</p>}
               <div className="admin-form-modal__body">
+                {entity === "facturas" && !editingId && (
+                  <div className="px-4 pt-3">
+                    <div className="admin-entity-fields">
+                      <label className="admin-entity-field">
+                        <span>Ciclo activo *</span>
+                        <select
+                          className="form-select"
+                          value={billingCycleId}
+                          onChange={(event) => setBillingCycleId(event.target.value)}
+                          required
+                          disabled={loadingBillingCycles || billingCycles.length === 0}
+                        >
+                          <option value="">
+                            {loadingBillingCycles ? "Cargando ciclos..." : "Selecciona un ciclo"}
+                          </option>
+                          {billingCycles.map((cycle) => (
+                            <option key={cycle.id_ciclo} value={cycle.id_ciclo}>{cycle.nombre}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="admin-entity-field">
+                        <span>Mes y año *</span>
+                        <input
+                          className="form-control"
+                          type="month"
+                          value={billingMonth}
+                          onChange={(event) => setBillingMonth(event.target.value)}
+                          required
+                        />
+                      </label>
+                    </div>
+                    {selectedBillingCycle && (
+                      <p className="text-muted small mb-0">
+                        Vencimiento sugerido: {addDaysToDate(
+                          values.fecha_emision,
+                          Number(selectedBillingCycle.dias_vencimiento)
+                        ) || "—"} ({selectedBillingCycle.dias_vencimiento} días después de la emisión).
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Stepper
                   key={`${entity}-${editingId || "new"}`}
                   step={formStep}

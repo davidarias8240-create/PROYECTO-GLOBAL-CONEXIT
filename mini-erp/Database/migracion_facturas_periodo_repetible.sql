@@ -1,8 +1,7 @@
 USE global_conexit;
 
--- Reemplaza el índice único contrato-período por uno no único.
--- Así se admiten facturas repetidas y se conserva el índice que usa la clave foránea.
--- Las comprobaciones permiten ejecutar este archivo aunque la migración ya se haya aplicado.
+-- Asegura una sola factura por contrato y período, sin borrar ni modificar facturas.
+-- Si ya existen duplicados, MariaDB rechaza la restricción y requiere revisión manual.
 SET @tiene_indice_contrato = (
     SELECT COUNT(*)
     FROM INFORMATION_SCHEMA.STATISTICS
@@ -30,8 +29,8 @@ SET @tiene_indice_unico = (
 
 SET @sql_indice_unico = IF(
     @tiene_indice_unico > 0,
-    'ALTER TABLE factura DROP INDEX uq_factura_contrato_periodo',
-    'SELECT 1'
+    'SELECT 1',
+    'ALTER TABLE factura ADD CONSTRAINT uq_factura_contrato_periodo UNIQUE (id_contrato, id_periodo)'
 );
 PREPARE sentencia_indice_unico FROM @sql_indice_unico;
 EXECUTE sentencia_indice_unico;

@@ -46,15 +46,19 @@ Configura `password_reset_base_url` en `backend\config\mail.local.php` con el or
 
 Para capturar correos localmente, configura PHPMailer con `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, `SMTP_ENCRYPTION=none` y `SMTP_FROM_EMAIL=pruebas@example.test`. La opción `none` se acepta únicamente para SMTP local sin autenticación; puede usarse con Mailpit u otro servidor SMTP de pruebas. No uses esa opción en producción.
 
-## Facturación automática
+## Ciclos y facturación automática
 
-El proceso de facturación se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:
+Administra las reglas recurrentes desde **Ciclos de facturación**. Los períodos se crean automáticamente al generar una factura; no se deben insertar manualmente. Aplica `mini-erp\Database\migracion_ciclos_facturacion.sql` sobre una base existente antes de usar el módulo. La migración conserva la relación de `factura.id_periodo` y los períodos históricos; los registros históricos quedan sin ciclo asociado y las nuevas filas requieren ciclo, año y mes.
+
+En una base que ya tenía ciclos instalados, aplica una sola vez `mini-erp\Database\migracion_fechas_servicio_factura.sql` y luego `mini-erp\Database\migracion_generacion_facturas.sql`. La segunda migración registra el indicador y los días prorrateados, el concepto de factura y la unicidad por contrato/período; completa las facturas existentes a partir de la fecha de activación (`contrato.fecha_inicio`) y conserva sus montos históricos. En **Generar Facturas**, selecciona ciclo y mes/año, revisa la vista previa y genera facturas individuales o masivas; el backend asigna el número automáticamente y omite contratos con una factura que ya cubra el período. La fecha de emisión no interviene en la elegibilidad ni en el prorrateo.
+
+El proceso de facturación automática se ejecuta desde PHP CLI, no al abrir el panel. Primero valida el resultado sin escribir en la base de datos:
 
 ```powershell
 C:\xampp\php\php.exe C:\xampp\htdocs\PROYECTO-GLOBAL-CONEXIT\backend\facturas\generar_automaticas.php --dry-run
 ```
 
-Para registrar las facturas, ejecútalo con `--execute`. El proceso toma el día de inicio de cada contrato como su corte mensual, usa el precio actual de su plan y crea el período y la factura pendientes en una sola transacción. Reutiliza el plazo de vencimiento más común de los períodos válidos existentes; si no hay períodos válidos, configura `GLOBAL_CONEXIT_BILLING_DUE_DAYS` con el número de días de vencimiento antes de ejecutar.
+Para registrar las facturas, ejecútalo con `--execute`. El proceso usa el ciclo activo y su precio actual de plan; crea el período técnico y la factura pendiente con vencimiento calculado desde la fecha de emisión. Si hay más de un ciclo activo, selecciona uno mediante `GLOBAL_CONEXIT_BILLING_CYCLE_ID`. Al activar el prorrateo, el primer período se cobra proporcionalmente a los días activos; si se desactiva, los contratos elegibles se cobran por el valor completo del ciclo.
 
 Para automatizarlo en Windows, crea una tarea diaria en el Programador de tareas:
 
@@ -62,7 +66,7 @@ Para automatizarlo en Windows, crea una tarea diaria en el Programador de tareas
 - **Argumentos:** `C:\xampp\htdocs\PROYECTO-GLOBAL-CONEXIT\backend\facturas\generar_automaticas.php --execute`
 - **Iniciar en:** `C:\xampp\htdocs\PROYECTO-GLOBAL-CONEXIT`
 
-La tarea no se registra automáticamente. Antes de habilitarla, revisa la simulación y confirma el horario y el plazo de vencimiento configurado. El proceso puede repetirse con seguridad: bloquea el contrato durante la generación y no crea otra factura para el mismo contrato y período.
+La tarea no se registra automáticamente. Antes de habilitarla, revisa la simulación y confirma el ciclo activo. El proceso puede repetirse con seguridad: bloquea el contrato durante la generación y no factura días ya facturados.
 
 ## Idempotencia de pagos
 

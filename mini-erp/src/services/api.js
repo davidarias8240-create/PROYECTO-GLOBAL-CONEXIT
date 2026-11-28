@@ -1,9 +1,22 @@
 const BASE_URL = "/backend";
 
 async function readResponse(response) {
-  const data = await response.json();
+  const responseText = await response.text();
+  let data;
+  try {
+    data = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    throw new Error(
+      response.ok
+        ? "El servidor devolvió una respuesta que no es JSON."
+        : `El servidor respondió con HTTP ${response.status} y una respuesta que no es JSON.`,
+    );
+  }
   if (!response.ok) {
-    throw new Error(data.error || "No se pudo completar la operación");
+    throw new Error(data?.error || `No se pudo completar la operación (HTTP ${response.status}).`);
+  }
+  if (data === null) {
+    throw new Error("El servidor devolvió una respuesta vacía.");
   }
   return data;
 }
@@ -160,6 +173,63 @@ export function reactivarRegistroEntidad(entity, id) {
   return solicitarEntidad(entity, "reactivar.php", {
     method: "POST",
     body: { id },
+  });
+}
+
+export function eliminarRegistroPermanentementeEntidad(entity, id) {
+  const query = new URLSearchParams({
+    entidad: entity,
+    operacion: "eliminar_permanentemente",
+  });
+  return request(`admin/entidades.php?${query}`, {
+    method: "POST",
+    body: { id },
+  });
+}
+
+export function obtenerCiclosFacturacion(activos = false) {
+  const query = activos ? "?activos=1" : "";
+  return request(`periodos/ciclos.php${query}`);
+}
+
+export function guardarCicloFacturacion(datos, idCiclo = null) {
+  return request("periodos/ciclos.php", {
+    method: "POST",
+    body: { ...datos, operacion: idCiclo === null ? "crear" : "editar", id_ciclo: idCiclo },
+  });
+}
+
+export function cambiarEstadoCicloFacturacion(idCiclo, estado) {
+  return request("periodos/ciclos.php", {
+    method: "POST",
+    body: { operacion: "cambiar_estado", id_ciclo: idCiclo, estado },
+  });
+}
+
+export function obtenerOCrearPeriodoFacturacion(idCiclo, anio, mes, fechaEmision) {
+  return request("periodos/ciclos.php", {
+    method: "POST",
+    body: {
+      operacion: "obtener_periodo",
+      id_ciclo: idCiclo,
+      anio,
+      mes,
+      fecha_emision: fechaEmision,
+    },
+  });
+}
+
+export function previsualizarGeneracionFacturas(datos) {
+  return request("facturas/generacion_admin.php", {
+    method: "POST",
+    body: { ...datos, operacion: "previsualizar" },
+  });
+}
+
+export function generarFacturasAdmin(datos, idContratos) {
+  return request("facturas/generacion_admin.php", {
+    method: "POST",
+    body: { ...datos, operacion: "generar", id_contratos: idContratos },
   });
 }
 

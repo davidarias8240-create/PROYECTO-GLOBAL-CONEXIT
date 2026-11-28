@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . "/../config/admin_auth.php";
 require_once __DIR__ . "/../config/form_validation.php";
+require_once __DIR__ . "/../periodos/ciclo_service.php";
+require_once __DIR__ . "/../facturas/factura_service.php";
 
 $origin = $_SERVER["HTTP_ORIGIN"] ?? "";
 $normalizedOrigin = rtrim($origin, "/");
@@ -453,9 +455,10 @@ function existeFacturaParaPeriodo(PDO $pdo, string $idContrato, string $idPeriod
          INNER JOIN periodo_facturacion pf ON pf.id_periodo = f.id_periodo
          INNER JOIN periodo_facturacion periodo_solicitado
              ON periodo_solicitado.id_periodo = :id_periodo
-            AND periodo_solicitado.fecha_inicio = pf.fecha_inicio
-            AND periodo_solicitado.fecha_fin = pf.fecha_fin
+            AND periodo_solicitado.fecha_inicio <= pf.fecha_fin
+            AND periodo_solicitado.fecha_fin >= pf.fecha_inicio
          WHERE f.id_contrato = :id_contrato{$idExclusion}
+           AND f.estado <> 'ANULADA'
          LIMIT 1"
     );
     $params = [":id_periodo" => $idPeriodo, ":id_contrato" => $idContrato];
@@ -610,7 +613,20 @@ function obtenerMetadatos(PDO $pdo, string $baseDatos, string $tabla, string $cl
                     "/^CURRENT_TIMESTAMP(?:\\(\\))?$/i",
                     trim((string) $column["COLUMN_DEFAULT"], "'")
                 ) === 1
-                || $name === "ultimo_acceso",
+                || $name === "ultimo_acceso"
+                || ($tabla === "factura"
+                    && in_array($name, [
+                        "id_contrato",
+                        "id_periodo",
+                        "numero",
+                        "fecha_servicio_inicio",
+                        "fecha_servicio_fin",
+                        "es_prorrateada",
+                        "dias_facturados",
+                        "descripcion",
+                        "total",
+                        "saldo",
+                    ], true)),
             "enum" => $enumValues,
             "relation" => $relations[$name] ?? null
         ];
@@ -953,6 +969,13 @@ try {
     $metadata = obtenerMetadatos($pdo, $baseDatos, $tabla, $clave);
     $method = $_SERVER["REQUEST_METHOD"];
 
+    if ($entidad === "periodos" && $method === "POST") {
+        responder(["error" => "Los períodos se generan automáticamente desde un ciclo de facturación"], 405);
+    }
+    if ($entidad === "facturas" && $method === "POST" && $operacion === "crear") {
+        responder(["error" => "Usa la vista previa de Generar Facturas para crear facturas"], 405);
+    }
+
     if ($method === "GET" && $operacion === "meta") {
         foreach ($metadata["columns"] as &$column) {
             $column["creatable"] = campoCreableAdministrativo($rolPanel, $entidad, $column["name"]);
@@ -1068,7 +1091,7 @@ try {
         $action = match ($operacion) {
             "crear" => "crear",
             "editar" => "editar",
-            "eliminar", "reactivar" => "archivar",
+            "eliminar", "reactivar", "eliminar_permanentemente" => "archivar",
             default => null,
         };
         if ($action !== null && !$permisosEntidad[$action]) {
@@ -1224,11 +1247,63 @@ try {
                 $pdo->rollBack();
                 responder(["error" => "Selecciona un contrato válido para la factura"], 400);
             }
+            $cicloPeriodo = $pdo->prepare(
+                "SELECT c.dias_vencimiento, c.prorratear_primer_mes, c.estado,
+                        p.fecha_inicio AS periodo_inicio, p.fecha_fin AS periodo_fin,
+                        co.fecha_inicio AS fecha_activacion, pl.precio, pl.nombre AS plan_nombre
+                 FROM periodo_facturacion p
+                 INNER JOIN ciclo_facturacion c ON c.id_ciclo = p.id_ciclo
+                 INNER JOIN contrato co ON co.id_contrato = :id_contrato
+                 INNER JOIN plan pl ON pl.id_plan = co.id_plan
+                 WHERE p.id_periodo = :id_periodo
+                 FOR UPDATE"
+            );
+            $cicloPeriodo->execute([
+                ":id_contrato" => $idContratoFactura,
+                ":id_periodo" => $idPeriodoFactura,
+            ]);
+            $reglaPeriodo = $cicloPeriodo->fetch();
+            if (!$reglaPeriodo || $reglaPeriodo["estado"] !== "ACTIVO") {
+                $pdo->rollBack();
+                responder(["error" => "Selecciona un período de un ciclo activo"], 409);
+            }
+            $servicioFactura = calcularServicioFactura(
+                (string) $reglaPeriodo["fecha_activacion"],
+                (string) $reglaPeriodo["periodo_inicio"],
+                (string) $reglaPeriodo["periodo_fin"],
+                (int) $reglaPeriodo["prorratear_primer_mes"],
+                (float) $reglaPeriodo["precio"]
+            );
+            if ($servicioFactura === null) {
+                $pdo->rollBack();
+                responder(["error" => "El ciclo no permite facturar parcialmente el primer período"], 409);
+            }
+            $values["numero"] = generarNumeroFactura(
+                $pdo,
+                $idContratoFactura,
+                (string) $reglaPeriodo["periodo_inicio"]
+            );
+            $values["fecha_servicio_inicio"] = $servicioFactura["fecha_servicio_inicio"];
+            $values["fecha_servicio_fin"] = $servicioFactura["fecha_servicio_fin"];
+            $values["es_prorrateada"] = $servicioFactura["es_prorrateada"];
+            $values["dias_facturados"] = $servicioFactura["dias_facturados"];
+            $values["descripcion"] = descripcionFactura($reglaPeriodo["plan_nombre"], $servicioFactura);
+            $values["total"] = $servicioFactura["total"];
+            $values["saldo"] = $servicioFactura["total"];
+            if (empty($values["fecha_vencimiento"])) {
+                $values["fecha_vencimiento"] = fechaVencimientoCiclo(
+                    (string) $values["fecha_emision"],
+                    (int) $reglaPeriodo["dias_vencimiento"]
+                );
+            }
             if (existeFacturaParaPeriodo($pdo, $idContratoFactura, $idPeriodoFactura)) {
                 $pdo->rollBack();
-                responder(["error" => "Ya existe una factura para este contrato y período"], 409);
+                responder(["error" => "El contrato ya tiene una factura para días solapados"], 409);
             }
         }
+        $names = array_keys($values);
+        $fieldsSql = implode(", ", array_map(static fn(string $name): string => "`{$name}`", $names));
+        $paramsSql = implode(", ", array_map(static fn(string $name): string => ":" . $name, $names));
         if ($tabla === "pago") {
             $idFacturaPago = (string) ($values["id_factura"] ?? "");
             $facturaPago = $idFacturaPago === "" ? false : obtenerFacturaBloqueada($pdo, $idFacturaPago);
@@ -1835,6 +1910,68 @@ try {
         responder(["success" => true]);
     }
 
+    if ($method === "POST" && $operacion === "eliminar_permanentemente") {
+        if ($rolPanel !== "ADMINISTRADOR") {
+            responder(["error" => "Solo un administrador puede eliminar registros permanentemente"], 403);
+        }
+        if (!$definicion["archivable"] || $id === "" || !is_array($data)) {
+            responder(["error" => "Esta tabla no permite eliminación permanente"], 400);
+        }
+        if ($tabla === "usuario" && $id === (string) $_SESSION["id_usuario"]) {
+            responder(["error" => "No puedes eliminar tu propia cuenta administrativa"], 400);
+        }
+
+        $pdo->beginTransaction();
+        $archivoStmt = $pdo->prepare(
+            "SELECT estado_anterior
+             FROM admin_bajas
+             WHERE entidad COLLATE utf8mb4_unicode_ci = :entidad COLLATE utf8mb4_unicode_ci
+               AND id_registro COLLATE utf8mb4_unicode_ci = :id COLLATE utf8mb4_unicode_ci
+             FOR UPDATE"
+        );
+        $archivoStmt->execute([":entidad" => $entidad, ":id" => $id]);
+        $archivo = $archivoStmt->fetch();
+        if (!$archivo) {
+            $pdo->rollBack();
+            responder(["error" => "El registro no está en la lista de desactivados"], 404);
+        }
+
+        $registroStmt = $pdo->prepare(
+            "SELECT `{$clave}` FROM `{$tabla}` WHERE `{$clave}` = :id FOR UPDATE"
+        );
+        $registroStmt->execute([":id" => $id]);
+        if ($registroStmt->fetchColumn() === false) {
+            $pdo->rollBack();
+            responder(["error" => "No se encontró el registro que se quiere eliminar"], 404);
+        }
+
+        auditar($pdo, $tabla, $id, "ELIMINAR_PERMANENTEMENTE", [
+            "entidad" => $entidad,
+            "estado_anterior" => $archivo["estado_anterior"],
+        ]);
+        $eliminarRegistro = $pdo->prepare(
+            "DELETE FROM `{$tabla}` WHERE `{$clave}` = :id"
+        );
+        $eliminarRegistro->execute([":id" => $id]);
+        if ($eliminarRegistro->rowCount() !== 1) {
+            $pdo->rollBack();
+            responder(["error" => "No se encontró el registro que se quiere eliminar"], 404);
+        }
+
+        $eliminarArchivo = $pdo->prepare(
+            "DELETE FROM admin_bajas
+             WHERE entidad COLLATE utf8mb4_unicode_ci = :entidad COLLATE utf8mb4_unicode_ci
+               AND id_registro COLLATE utf8mb4_unicode_ci = :id COLLATE utf8mb4_unicode_ci"
+        );
+        $eliminarArchivo->execute([":entidad" => $entidad, ":id" => $id]);
+        if ($eliminarArchivo->rowCount() !== 1) {
+            $pdo->rollBack();
+            responder(["error" => "No se pudo retirar el registro de desactivados"], 409);
+        }
+        $pdo->commit();
+        responder(["success" => true]);
+    }
+
     if ($method === "POST" && ($operacion === "eliminar" || $operacion === "reactivar")) {
         if (!$definicion["archivable"] || $id === "" || !is_array($data)) {
             responder(["error" => "Esta tabla no permite desactivar o reactivar registros"], 400);
@@ -1954,7 +2091,9 @@ try {
     $code = $exception->getCode() === "23000" ? 409 : 422;
     responder([
         "error" => $code === 409
-            ? "El registro duplica un dato único o está relacionado con otros datos"
+            ? ($operacion === "eliminar_permanentemente"
+                ? "No se puede eliminar permanentemente: el registro tiene datos relacionados o incumple una restricción"
+                : "El registro duplica un dato único o está relacionado con otros datos")
             : "La operación no cumple las reglas de la base de datos"
     ], $code);
 } catch (Throwable $exception) {

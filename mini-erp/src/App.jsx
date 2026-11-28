@@ -6,6 +6,8 @@ import PasswordRecovery from "./pages/PasswordRecovery";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ClientPortal from "./pages/interfazcliente";
 import EntityAdmin from "./pages/EntidadAdmin";
+import CiclosAdmin from "./pages/CiclosAdmin";
+import FacturasAdmin from "./pages/FacturasAdmin";
 import CustomerDetail from "./pages/CustomerDetail";
 import Dashboard from "./pages/Dashboard";
 import Desactivados from "./pages/Desactivados";
@@ -39,7 +41,11 @@ function App() {
                         path={`/${key}`}
                         element={
                             <DashboardLayout>
-                                <EntityAdmin entity={key} />
+                                {key === "periodos"
+                                    ? <CiclosAdmin />
+                                    : key === "facturas"
+                                        ? <FacturasAdmin />
+                                        : <EntityAdmin entity={key} />}
                             </DashboardLayout>
                         }
                     />

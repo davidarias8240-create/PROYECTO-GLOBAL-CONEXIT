@@ -363,7 +363,9 @@ $notificacionesStmt->execute([":id_cliente" => $idCliente]);
 $notificaciones = $notificacionesStmt->fetchAll();
 
 $facturasStmt = $pdo->prepare(
-    "SELECT f.*, co.id_cliente, p.nombre AS plan_nombre, pf.fecha_inicio AS periodo_inicio, pf.fecha_fin AS periodo_fin,
+    "SELECT f.*, co.id_cliente, p.nombre AS plan_nombre,
+            COALESCE(f.fecha_servicio_inicio, pf.fecha_inicio) AS periodo_inicio,
+            COALESCE(f.fecha_servicio_fin, pf.fecha_fin) AS periodo_fin,
             pf.fecha_vencimiento AS periodo_vencimiento
      FROM factura f
      INNER JOIN contrato co ON co.id_contrato = f.id_contrato

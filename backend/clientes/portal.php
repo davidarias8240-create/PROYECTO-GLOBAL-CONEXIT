@@ -96,8 +96,11 @@ try {
             f.total,
             f.saldo,
             f.estado,
-            pf.fecha_inicio AS periodo_inicio,
-            pf.fecha_fin AS periodo_fin,
+            f.descripcion,
+            f.es_prorrateada,
+            f.dias_facturados,
+            COALESCE(f.fecha_servicio_inicio, pf.fecha_inicio) AS periodo_inicio,
+            COALESCE(f.fecha_servicio_fin, pf.fecha_fin) AS periodo_fin,
             COALESCE((
                 SELECT SUM(pg.valor)
                 FROM pago pg

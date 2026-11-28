@@ -268,7 +268,11 @@ function InvoicesView({ facturas, resumen, setFacturaSeleccionada, setCurrentVie
 					return (
 						<div className="invoice-row" key={factura.id_factura}>
 							<strong>{factura.numero}</strong>
-							<span>{formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}<small>Vence {formatDate(factura.fecha_vencimiento)}</small></span>
+							<span>
+								{formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}
+								{factura.descripcion && <small>{factura.descripcion}</small>}
+								<small>Vence {formatDate(factura.fecha_vencimiento)}</small>
+							</span>
 							<strong>{formatMoney(factura.total)}<small>Saldo: {formatMoney(factura.saldo)}</small></strong>
 							<span className={`invoice-status ${estado.className}`}>{estado.label}</span>
 							<span>{facturaPendiente(factura) && <button className="pay-button" type="button" onClick={() => { setFacturaSeleccionada(factura.id_factura); setCurrentView("pago"); }}>Pagar</button>}</span>
@@ -350,7 +354,12 @@ function PaymentView({ factura, onPay, onPaymentReturn, refreshError, theme, onT
 				) : (
 					<>
 						<div className="payment-due">
-							<div><small>Factura #{factura.numero}</small><strong>Período {formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}</strong><span>Vence {formatDate(factura.fecha_vencimiento)}</span></div>
+							<div>
+								<small>Factura #{factura.numero}</small>
+								<strong>Período {formatDate(factura.periodo_inicio)} – {formatDate(factura.periodo_fin)}</strong>
+								{factura.descripcion && <span>{factura.descripcion}</span>}
+								<span>Vence {formatDate(factura.fecha_vencimiento)}</span>
+							</div>
 							<b>{formatMoney(factura.saldo)}<small>Saldo pendiente · COP</small></b>
 						</div>
 						<form className="dashboard-card payment-card" onSubmit={iniciarCheckout}>
