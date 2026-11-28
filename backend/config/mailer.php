@@ -1,8 +1,13 @@
 <?php
 
 use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
 
-require_once dirname(__DIR__, 2) . "/vendor/autoload.php";
+$autoloadPath = dirname(__DIR__, 2) . "/vendor/autoload.php";
+if (!is_file($autoloadPath)) {
+    throw new RuntimeException("No se encontró vendor/autoload.php en: " . $autoloadPath);
+}
+require_once $autoloadPath;
 
 function cargarConfiguracionMailer(): array
 {
@@ -90,7 +95,7 @@ function crearMailer(): PHPMailer
     $mailer = new PHPMailer(true);
     $mailer->isSMTP();
     if (filter_var($config["smtp_debug"] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-        $mailer->SMTPDebug = PHPMailer::DEBUG_SERVER;
+        $mailer->SMTPDebug = SMTP::DEBUG_SERVER;
         $mailer->Debugoutput = static function (string $message, int $level): void {
             if (str_contains($message, "CLIENT -> SERVER:")) {
                 return;

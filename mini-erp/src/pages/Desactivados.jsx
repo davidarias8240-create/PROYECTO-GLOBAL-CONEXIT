@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   obtenerMetadatosEntidad,
   obtenerRegistrosEntidad,
+  eliminarRegistroPermanentementeEntidad,
   reactivarRegistroEntidad,
 } from "../services/api";
 import { adminEntities } from "../config/adminEntities";
@@ -16,6 +17,7 @@ function Desactivados() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [restoring, setRestoring] = useState("");
+  const [deleting, setDeleting] = useState("");
   const [notice, setNotice] = useState("");
 
   const loadArchived = useCallback(async () => {
@@ -25,13 +27,12 @@ function Desactivados() {
       const results = await Promise.all(adminEntities
         .filter(({ key }) => key !== "auditoria")
         .map(async ({ key: entity }) => {
-        const [metadata, response] = await Promise.all([
-          obtenerMetadatosEntidad(entity),
-          obtenerRegistrosEntidad(entity, true),
-        ]);
-        return { entity, metadata, records: response.registros };
+          const metadata = await obtenerMetadatosEntidad(entity);
+          if (!metadata.archivable) return null;
+          const response = await obtenerRegistrosEntidad(entity, true);
+          return { entity, metadata, records: response.registros };
       }));
-      setGroups(results.filter((group) => group.records.length > 0));
+      setGroups(results.filter((group) => group && group.records.length > 0));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -60,6 +61,26 @@ function Desactivados() {
       await showErrorAlert("No se pudo reactivar el registro", restoreError.message);
     } finally {
       setRestoring("");
+    }
+  };
+
+  const handlePermanentDelete = async (entity, id) => {
+    if (!await confirmAction({
+      title: "¿Eliminar permanentemente este registro?",
+      text: "Se eliminará el registro y no se podrá recuperar. Si otros datos dependen de él, la base de datos impedirá la operación.",
+      confirmButtonText: "Eliminar permanentemente",
+    })) return;
+    setDeleting(`${entity}:${id}`);
+    setError("");
+    setNotice("");
+    try {
+      await eliminarRegistroPermanentementeEntidad(entity, id);
+      await showSuccessAlert("Registro eliminado", "El registro se eliminó permanentemente.");
+      await loadArchived();
+    } catch (deleteError) {
+      await showErrorAlert("No se pudo eliminar el registro", deleteError.message);
+    } finally {
+      setDeleting("");
     }
   };
 
@@ -109,15 +130,25 @@ function Desactivados() {
                       ))}
                       <td>{record.fecha_baja}</td>
                       <td>{record.estado_anterior || "—"}</td>
-                      <td>
+                      <td className="d-flex flex-wrap gap-2">
                         <button
                           type="button"
                           className="btn btn-success btn-sm"
-                          disabled={restoring === restoreKey}
+                          disabled={restoring === restoreKey || deleting === restoreKey}
                           onClick={() => handleRestore(entity, id)}
                         >
                           {restoring === restoreKey ? "Reactivando..." : "Reactivar"}
                         </button>
+                        {metadata.archivable && metadata.permisos?.archivar && (
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            disabled={restoring === restoreKey || deleting === restoreKey}
+                            onClick={() => handlePermanentDelete(entity, id)}
+                          >
+                            {deleting === restoreKey ? "Eliminando..." : "Eliminar permanentemente"}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

@@ -16,6 +16,7 @@ const auditedEntities = {
   direccion: "direcciones",
   plan: "planes",
   contrato: "contratos",
+  ciclo_facturacion: "periodos",
   periodo_facturacion: "periodos",
   factura: "facturas",
   pago: "pagos",

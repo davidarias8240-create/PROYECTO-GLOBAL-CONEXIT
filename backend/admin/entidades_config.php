@@ -46,9 +46,9 @@ return [
     "periodos" => [
         "tabla" => "periodo_facturacion",
         "clave" => "id_periodo",
-        "titulo" => "Períodos de facturación",
-        "editable" => true,
-        "archivable" => true
+        "titulo" => "Períodos generados",
+        "editable" => false,
+        "archivable" => false
     ],
     "facturas" => [
         "tabla" => "factura",

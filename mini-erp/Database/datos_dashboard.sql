@@ -177,8 +177,25 @@ CREATE TABLE contrato (
 -- 7. TABLA: PERIODO FACTURACION
 -- ============================================================
 
+CREATE TABLE ciclo_facturacion (
+    id_ciclo INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    dia_inicio TINYINT UNSIGNED NOT NULL DEFAULT 1,
+    dias_vencimiento SMALLINT UNSIGNED NOT NULL DEFAULT 10,
+    prorratear_primer_mes TINYINT(1) NOT NULL DEFAULT 1,
+    estado ENUM('ACTIVO', 'INACTIVO') NOT NULL DEFAULT 'ACTIVO',
+    fecha_creacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT chk_ciclo_dia_inicio CHECK (dia_inicio BETWEEN 1 AND 28),
+    CONSTRAINT chk_ciclo_dias_vencimiento CHECK (dias_vencimiento >= 1)
+) ENGINE=InnoDB;
+
 CREATE TABLE periodo_facturacion (
     id_periodo INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id_ciclo INT UNSIGNED NOT NULL,
+    anio SMALLINT UNSIGNED NOT NULL,
+    mes TINYINT UNSIGNED NOT NULL,
     fecha_inicio DATE NOT NULL,
     fecha_fin DATE NOT NULL,
     fecha_vencimiento DATE NOT NULL,
@@ -187,12 +204,23 @@ CREATE TABLE periodo_facturacion (
         'CERRADO'
     ) NOT NULL DEFAULT 'ABIERTO',
 
+    INDEX idx_periodo_ciclo_fechas (id_ciclo, fecha_inicio, fecha_fin),
+    CONSTRAINT uq_periodo_ciclo_anio_mes UNIQUE (id_ciclo, anio, mes),
+    CONSTRAINT fk_periodo_ciclo
+        FOREIGN KEY (id_ciclo)
+        REFERENCES ciclo_facturacion(id_ciclo)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT,
+    CONSTRAINT chk_periodo_mes CHECK (mes BETWEEN 1 AND 12),
     CONSTRAINT chk_periodo_fechas
-        CHECK (fecha_fin >= fecha_inicio),
-
-    CONSTRAINT chk_periodo_vencimiento
-        CHECK (fecha_vencimiento >= fecha_fin)
+        CHECK (fecha_fin >= fecha_inicio)
 ) ENGINE=InnoDB;
+
+CREATE TABLE periodo_solapamiento_guard (
+    id TINYINT UNSIGNED PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO periodo_solapamiento_guard (id) VALUES (1);
 
 
 -- ============================================================
@@ -203,6 +231,11 @@ CREATE TABLE factura (
     id_factura INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     id_contrato INT UNSIGNED NOT NULL,
     id_periodo INT UNSIGNED NOT NULL,
+    fecha_servicio_inicio DATE NOT NULL,
+    fecha_servicio_fin DATE NOT NULL,
+    es_prorrateada TINYINT(1) NOT NULL DEFAULT 0,
+    dias_facturados SMALLINT UNSIGNED NOT NULL,
+    descripcion VARCHAR(255) NOT NULL,
     numero VARCHAR(50) NOT NULL UNIQUE,
     fecha_emision DATE NOT NULL,
     fecha_vencimiento DATE NOT NULL,
@@ -227,7 +260,6 @@ CREATE TABLE factura (
         ON UPDATE CASCADE
         ON DELETE RESTRICT,
 
-    -- La misma combinación contrato/período puede generar varias facturas.
     CONSTRAINT chk_factura_total
         CHECK (total >= 0),
 
@@ -238,8 +270,248 @@ CREATE TABLE factura (
         ),
 
     CONSTRAINT chk_factura_fechas
-        CHECK (fecha_vencimiento >= fecha_emision)
+        CHECK (fecha_vencimiento >= fecha_emision),
+
+    CONSTRAINT chk_factura_fechas_servicio
+        CHECK (fecha_servicio_fin >= fecha_servicio_inicio),
+
+    CONSTRAINT chk_factura_es_prorrateada
+        CHECK (es_prorrateada IN (0, 1)),
+
+    CONSTRAINT chk_factura_dias_facturados
+        CHECK (dias_facturados >= 1),
+
+    CONSTRAINT uq_factura_contrato_periodo
+        UNIQUE (id_contrato, id_periodo)
 ) ENGINE=InnoDB;
+
+DELIMITER $$
+
+CREATE TRIGGER periodo_facturacion_bi
+BEFORE INSERT ON periodo_facturacion
+FOR EACH ROW
+BEGIN
+    DECLARE v_dia_inicio TINYINT UNSIGNED;
+    DECLARE v_estado VARCHAR(10);
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+    DECLARE v_guard TINYINT UNSIGNED;
+    DECLARE v_solapados INT DEFAULT 0;
+
+    IF NEW.id_ciclo IS NULL OR NEW.anio IS NULL OR NEW.mes IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Los períodos nuevos requieren ciclo, año y mes';
+    END IF;
+
+    SELECT id INTO v_guard
+    FROM periodo_solapamiento_guard
+    WHERE id = 1
+    FOR UPDATE;
+
+    SELECT dia_inicio, estado INTO v_dia_inicio, v_estado
+    FROM ciclo_facturacion
+    WHERE id_ciclo = NEW.id_ciclo;
+
+    IF v_estado <> 'ACTIVO' OR NEW.anio < 1000 OR NEW.anio > 9999
+        OR NEW.mes < 1 OR NEW.mes > 12 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El ciclo, año o mes del período no es válido';
+    END IF;
+
+    SET v_inicio = STR_TO_DATE(
+        CONCAT(NEW.anio, '-', LPAD(NEW.mes, 2, '0'), '-', LPAD(v_dia_inicio, 2, '0')),
+        '%Y-%m-%d'
+    );
+    SET v_fin = IF(
+        v_dia_inicio = 1,
+        LAST_DAY(v_inicio),
+        DATE_SUB(DATE_ADD(v_inicio, INTERVAL 1 MONTH), INTERVAL 1 DAY)
+    );
+
+    IF v_inicio IS NULL OR v_fin IS NULL
+        OR NEW.fecha_inicio <> v_inicio OR NEW.fecha_fin <> v_fin THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Las fechas del periodo no corresponden a su ciclo';
+    END IF;
+
+    SELECT COUNT(*) INTO v_solapados
+    FROM periodo_facturacion p
+    WHERE p.id_ciclo = NEW.id_ciclo
+      AND p.fecha_inicio <= NEW.fecha_fin
+      AND p.fecha_fin >= NEW.fecha_inicio;
+    IF v_solapados > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El periodo se solapa con otro del mismo ciclo';
+    END IF;
+END$$
+
+CREATE TRIGGER periodo_facturacion_bu
+BEFORE UPDATE ON periodo_facturacion
+FOR EACH ROW
+BEGIN
+    DECLARE v_dia_inicio TINYINT UNSIGNED;
+    DECLARE v_estado VARCHAR(10);
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+    DECLARE v_guard TINYINT UNSIGNED;
+    DECLARE v_solapados INT DEFAULT 0;
+
+    IF NEW.id_ciclo IS NULL OR NEW.anio IS NULL OR NEW.mes IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Los períodos nuevos requieren ciclo, año y mes';
+    END IF;
+
+    SELECT id INTO v_guard
+    FROM periodo_solapamiento_guard
+    WHERE id = 1
+    FOR UPDATE;
+
+    SELECT dia_inicio, estado INTO v_dia_inicio, v_estado
+    FROM ciclo_facturacion
+    WHERE id_ciclo = NEW.id_ciclo;
+
+    IF v_estado <> 'ACTIVO' OR NEW.anio < 1000 OR NEW.anio > 9999
+        OR NEW.mes < 1 OR NEW.mes > 12 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El ciclo, año o mes del período no es válido';
+    END IF;
+
+    SET v_inicio = STR_TO_DATE(
+        CONCAT(NEW.anio, '-', LPAD(NEW.mes, 2, '0'), '-', LPAD(v_dia_inicio, 2, '0')),
+        '%Y-%m-%d'
+    );
+    SET v_fin = IF(
+        v_dia_inicio = 1,
+        LAST_DAY(v_inicio),
+        DATE_SUB(DATE_ADD(v_inicio, INTERVAL 1 MONTH), INTERVAL 1 DAY)
+    );
+
+    IF v_inicio IS NULL OR v_fin IS NULL
+        OR NEW.fecha_inicio <> v_inicio OR NEW.fecha_fin <> v_fin THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Las fechas del periodo no corresponden a su ciclo';
+    END IF;
+
+    SELECT COUNT(*) INTO v_solapados
+    FROM periodo_facturacion p
+    WHERE p.id_ciclo = NEW.id_ciclo
+      AND p.id_periodo <> NEW.id_periodo
+      AND p.fecha_inicio <= NEW.fecha_fin
+      AND p.fecha_fin >= NEW.fecha_inicio;
+    IF v_solapados > 0 THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'El periodo se solapa con otro del mismo ciclo';
+    END IF;
+END$$
+
+CREATE TRIGGER factura_bi_sin_solapamiento
+BEFORE INSERT ON factura
+FOR EACH ROW
+BEGIN
+    DECLARE v_guard TINYINT UNSIGNED;
+    DECLARE v_solapadas INT DEFAULT 0;
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+
+    IF NEW.estado <> 'ANULADA' THEN
+        SELECT id INTO v_guard
+        FROM periodo_solapamiento_guard
+        WHERE id = 1
+        FOR UPDATE;
+
+        SELECT fecha_inicio, fecha_fin INTO v_inicio, v_fin
+        FROM periodo_facturacion
+        WHERE id_periodo = NEW.id_periodo;
+
+        SELECT COUNT(*) INTO v_solapadas
+        FROM factura f
+        INNER JOIN periodo_facturacion p ON p.id_periodo = f.id_periodo
+        WHERE f.id_contrato = NEW.id_contrato
+          AND f.estado <> 'ANULADA'
+          AND p.fecha_inicio <= v_fin
+          AND p.fecha_fin >= v_inicio;
+        IF v_solapadas > 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'El contrato ya tiene una factura para días solapados';
+        END IF;
+    END IF;
+END$$
+
+CREATE TRIGGER factura_bu_sin_solapamiento
+BEFORE UPDATE ON factura
+FOR EACH ROW
+BEGIN
+    DECLARE v_guard TINYINT UNSIGNED;
+    DECLARE v_solapadas INT DEFAULT 0;
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+
+    IF NEW.estado <> 'ANULADA' THEN
+        SELECT id INTO v_guard
+        FROM periodo_solapamiento_guard
+        WHERE id = 1
+        FOR UPDATE;
+
+        SELECT fecha_inicio, fecha_fin INTO v_inicio, v_fin
+        FROM periodo_facturacion
+        WHERE id_periodo = NEW.id_periodo;
+
+        SELECT COUNT(*) INTO v_solapadas
+        FROM factura f
+        INNER JOIN periodo_facturacion p ON p.id_periodo = f.id_periodo
+        WHERE f.id_contrato = NEW.id_contrato
+          AND f.id_factura <> NEW.id_factura
+          AND f.estado <> 'ANULADA'
+          AND p.fecha_inicio <= v_fin
+          AND p.fecha_fin >= v_inicio;
+        IF v_solapadas > 0 THEN
+            SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'El contrato ya tiene una factura para días solapados';
+        END IF;
+    END IF;
+END$$
+
+CREATE TRIGGER factura_bi_validar_fechas_servicio
+BEFORE INSERT ON factura
+FOR EACH ROW
+BEGIN
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+
+    SELECT fecha_inicio, fecha_fin INTO v_inicio, v_fin
+    FROM periodo_facturacion
+    WHERE id_periodo = NEW.id_periodo;
+
+    IF v_inicio IS NULL OR v_fin IS NULL
+        OR NEW.fecha_servicio_inicio < v_inicio
+        OR NEW.fecha_servicio_fin > v_fin
+        OR NEW.fecha_servicio_fin < NEW.fecha_servicio_inicio THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Las fechas de servicio de la factura deben estar dentro del período';
+    END IF;
+END$$
+
+CREATE TRIGGER factura_bu_validar_fechas_servicio
+BEFORE UPDATE ON factura
+FOR EACH ROW
+BEGIN
+    DECLARE v_inicio DATE;
+    DECLARE v_fin DATE;
+
+    SELECT fecha_inicio, fecha_fin INTO v_inicio, v_fin
+    FROM periodo_facturacion
+    WHERE id_periodo = NEW.id_periodo;
+
+    IF v_inicio IS NULL OR v_fin IS NULL
+        OR NEW.fecha_servicio_inicio < v_inicio
+        OR NEW.fecha_servicio_fin > v_fin
+        OR NEW.fecha_servicio_fin < NEW.fecha_servicio_inicio THEN
+        SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Las fechas de servicio de la factura deben estar dentro del período';
+    END IF;
+END$$
+
+DELIMITER ;
 
 
 -- ============================================================

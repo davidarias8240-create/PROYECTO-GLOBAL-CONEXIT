@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import EntityAdmin from "./EntidadAdmin";
+import FacturasAdmin from "./FacturasAdmin";
 import { obtenerDetalleCliente } from "../services/api";
 
 const customerSections = [
@@ -145,12 +146,16 @@ function CustomerDetailView({ clienteId, entidad }) {
               Este es un catálogo compartido; en la ficha del cliente está disponible solo para consulta.
             </p>
           )}
-          <EntityAdmin
-            key={`${selectedSection.key}-${clienteId}`}
-            entity={selectedSection.key}
-            customerId={clienteId}
-            customerUserId={cliente.id_usuario}
-          />
+          {selectedSection.key === "facturas" ? (
+            <FacturasAdmin customerId={clienteId} />
+          ) : (
+            <EntityAdmin
+              key={`${selectedSection.key}-${clienteId}`}
+              entity={selectedSection.key}
+              customerId={clienteId}
+              customerUserId={cliente.id_usuario}
+            />
+          )}
         </>
       ) : (
         <div className="card border-0 shadow-sm">
